@@ -1,0 +1,958 @@
+(function () {
+    if (document.getElementById('ds-temper-helper')) {
+        document.getElementById('ds-temper-helper').remove();
+    }
+
+    async function sendTelegramNotice(message) {
+        const token = localStorage.getItem('ds_tg_token') || '9021881742:AAGgYEyHQ3PCVmCKkeED7622ecM88KMFH3U';
+        const chatId = localStorage.getItem('ds_tg_chatid') || '1658876455';
+        if (!token || !chatId) return;
+        try {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(message)}`);
+        } catch (e) {}
+    }
+
+    window.__dsPacketLog = window.__dsPacketLog || [];
+    window.__dsLatestForgeT = {};
+    window.__dsResetCount = window.__dsResetCount || 0;
+    window.__dsReconnectCount = window.__dsReconnectCount || 0;
+
+    const PROBE_INTERVAL_MS = 60000; // 每 1 分鐘檢測一次
+    const PROBE_WAIT_PACKET_MS = 4500;
+    const PROBE_ALERT_EVERY_COUNT = 5; // 累積滿 5 次（5 分鐘）發一次通知
+    const CLEAR_CLOSE_MAX_RETRY = 5; // 清除後仍在介面重試點擊禁止上限 5 次
+
+    let netState = {
+        isDisconnected: false,
+        initialAlertSent: false,
+        retryFailCount: 0,
+        lastActivityTime: Date.now(),
+        probeTimer: null,
+        probeInFlight: false
+    };
+
+    let state = {
+        running: false,
+        calibrating: null,
+        charsiPos: JSON.parse(localStorage.getItem('ds_charsi_pos') || '{"x": 1124, "y": 550}'),
+        npcTemperPos: JSON.parse(localStorage.getItem('ds_npc_temper_pos') || '{"x": 1124, "y": 480}'),
+        npcClearPos: JSON.parse(localStorage.getItem('ds_npc_clear_pos') || '{"x": 1124, "y": 520}'),
+        temperPos: JSON.parse(localStorage.getItem('ds_temper_pos') || '{"x": 715, "y": 780}'),
+        cancelPos: JSON.parse(localStorage.getItem('ds_cancel_pos') || '{"x": 815, "y": 780}'),
+        tgToken: localStorage.getItem('ds_tg_token') || '9021881742:AAGgYEyHQ3PCVmCKkeED7622ecM88KMFH3U',
+        tgChatId: localStorage.getItem('ds_tg_chatid') || '1658876455'
+    };
+
+    function stopPassiveProbeLoop() {
+        if (netState.probeTimer) {
+            clearInterval(netState.probeTimer);
+            netState.probeTimer = null;
+        }
+        netState.probeInFlight = false;
+    }
+
+    function isInTemperInterface() {
+        const helper = document.getElementById('ds-temper-helper');
+        const testBox = document.getElementById('ds-ui-detector-test');
+        const probeBox = document.getElementById('ds-probe-test');
+        const els = Array.from(document.querySelectorAll('div, button, span, p, label, canvas'));
+        let visibleDomCount = 0;
+
+        for (const el of els) {
+            if (!el) continue;
+            if (helper && helper.contains(el)) continue;
+            if (testBox && testBox.contains(el)) continue;
+            if (probeBox && probeBox.contains(el)) continue;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width <= 1 || r.height <= 1) continue;
+            visibleDomCount++;
+        }
+
+        let cleanText = (document.body && document.body.innerText) ? document.body.innerText : '';
+        if (helper && helper.innerText) cleanText = cleanText.replace(helper.innerText, '');
+        if (testBox && testBox.innerText) cleanText = cleanText.replace(testBox.innerText, '');
+        if (probeBox && probeBox.innerText) cleanText = cleanText.replace(probeBox.innerText, '');
+        const hasStackNumberText = /\b\d{1,3}\b/.test(cleanText.trim());
+
+        return visibleDomCount >= 75 || (visibleDomCount >= 55 && hasStackNumberText);
+    }
+
+    async function stopForNotInTemperInterface(stageLabel = '') {
+        state.running = false;
+        stopPassiveProbeLoop();
+        netState.isDisconnected = false;
+        netState.initialAlertSent = false;
+        netState.retryFailCount = 0;
+        const statusEl = document.getElementById('ds-status');
+        if (statusEl) {
+            statusEl.innerText = `🛑 不在淬鍊介面${stageLabel ? ` (${stageLabel})` : ''}，已停止防誤點地圖！`;
+            statusEl.style.color = '#e74c3c';
+        }
+        await sendTelegramNotice('⚠️ D2 Survivors 警告：目前不在淬鍊介面中，已自動停止淬煉以避免誤點地圖！');
+    }
+
+    function isTemperPacket(jsonObj, rawStr) {
+        if (!rawStr) return false;
+        if (jsonObj && (jsonObj.forge !== undefined || jsonObj.outcome !== undefined || jsonObj.line !== undefined)) {
+            return true;
+        }
+        return false;
+    }
+
+    function hasServerDisconnectSignal(jsonObj, rawStr, httpStatus) {
+        if (typeof httpStatus === 'number' && (httpStatus === 0 || httpStatus >= 500 || httpStatus === 408 || httpStatus === 429)) {
+            return true;
+        }
+        if (jsonObj && (jsonObj.disconnected === true || jsonObj.overload === true)) {
+            return true;
+        }
+        if (rawStr) {
+            const lower = rawStr.toLowerCase();
+            const strictKeywords = [
+                'overload', 'overloaded', 'connection lost', 'server busy',
+                '伺服器過載', '連線中斷', '無法連接', '伺服器忙碌'
+            ];
+            if (strictKeywords.some(k => lower.includes(k))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 反向同步目前淬煉與命中次數至自定義校正輸入框
+    function reverseSyncCurrentCountsToCustomInputs() {
+        const hits1El = document.getElementById('ds-sync-hits1');
+        const hits2El = document.getElementById('ds-sync-hits2');
+        const totalEl = document.getElementById('ds-sync-total');
+
+        const affix1 = document.getElementById('ds-target-affix1') ? document.getElementById('ds-target-affix1').value.trim().toLowerCase() : '';
+        const affix2 = document.getElementById('ds-target-affix2') ? document.getElementById('ds-target-affix2').value.trim().toLowerCase() : '';
+        const forgeT = window.__dsLatestForgeT || {};
+
+        let totalTries = 0;
+        for (let k in forgeT) {
+            totalTries += (parseInt(forgeT[k]) || 0);
+        }
+
+        const c1 = (affix1 && forgeT[affix1]) ? (parseInt(forgeT[affix1]) || 0) : 0;
+        const c2 = (affix2 && forgeT[affix2]) ? (parseInt(forgeT[affix2]) || 0) : 0;
+
+        if (hits1El) hits1El.value = Math.min(10, Math.max(0, c1));
+        if (hits2El) hits2El.value = Math.min(10, Math.max(0, c2));
+        if (totalEl) totalEl.value = Math.min(10, Math.max(0, totalTries));
+    }
+
+    // 觸發「斷線繼續淬煉」接續流程（套用自定義次數、清零輸入框並接續）
+    function triggerDisconnectResume() {
+        if (parseInt(document.getElementById('ds-essence-count').value) <= 0) {
+            document.getElementById('ds-status').innerText = '❌ 恐懼精華不可為 0！';
+            return false;
+        }
+        applyAndResetManualCalibrationCounts();
+        stopPassiveProbeLoop();
+        netState.isDisconnected = false;
+        netState.initialAlertSent = false;
+        netState.retryFailCount = 0;
+        netState.lastActivityTime = Date.now();
+        window.__dsReconnectCount++;
+        document.getElementById('ds-status').innerText = '🔄 已套用自定義次數並清零輸入框，接續淬煉中...';
+        if (!state.running) {
+            state.running = true;
+            runLoop({ skipNpcOpenIfInInterface: true });
+        }
+        return true;
+    }
+
+    // 改為點擊打勾發送真實封包進行確認；未收到新封包則精華回補 1
+    async function runRealClickReconnectCheckOnce() {
+        if (!netState.isDisconnected || netState.probeInFlight) return;
+        if (!isInTemperInterface()) {
+            await stopForNotInTemperInterface('重連打勾檢測時不在介面');
+            return;
+        }
+
+        const essenceInput = document.getElementById('ds-essence-count');
+        let currentEssence = parseInt(essenceInput ? essenceInput.value : 0) || 0;
+        if (currentEssence <= 0) {
+            state.running = false;
+            stopPassiveProbeLoop();
+            const statusEl = document.getElementById('ds-status');
+            if (statusEl) statusEl.innerText = '❌ 恐懼精華已歸零，無法執行重連打勾檢測！';
+            await sendTelegramNotice('⚠️ D2 Survivors 助手警示：恐懼精華已耗盡歸零，停止重連檢測！');
+            return;
+        }
+
+        netState.probeInFlight = true;
+        netState.retryFailCount++;
+        const attemptNum = netState.retryFailCount;
+
+        // 暫扣 1 顆精華執行打勾測試，若未收到新封包會回補 1
+        essenceInput.value = currentEssence - 1;
+        const checkStartTime = Date.now();
+        const statusEl = document.getElementById('ds-status');
+        if (statusEl) {
+            statusEl.innerText = `🔁 離線重連檢測 (第 ${attemptNum} 次)：點擊打勾確認封包中...`;
+            statusEl.style.color = '#e09f3e';
+        }
+
+        simulateClick(state.temperPos.x, state.temperPos.y);
+
+        let receivedPacket = null;
+        const waitStart = Date.now();
+        while (Date.now() - waitStart < PROBE_WAIT_PACKET_MS) {
+            if (!netState.isDisconnected) break;
+            const pkts = window.__dsPacketLog;
+            for (let i = pkts.length - 1; i >= 0; i--) {
+                if (pkts[i].time >= checkStartTime && pkts[i].isTemper) {
+                    receivedPacket = pkts[i];
+                    break;
+                }
+            }
+            if (receivedPacket) break;
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        netState.probeInFlight = false;
+
+        if (!netState.isDisconnected) {
+            // 若期間已被一般封包流程恢復，把剛剛重連檢測暫扣的精華補回，避免重複扣
+            const latestEss = parseInt(essenceInput.value) || 0;
+            essenceInput.value = latestEss + 1;
+            return;
+        }
+
+        if (receivedPacket) {
+            await handleReconnectConfirmedAutoResume(receivedPacket);
+            return;
+        }
+
+        // 未收到新封包：精華回補 1，其餘設定維持不變
+        const afterEss = parseInt(essenceInput.value) || 0;
+        essenceInput.value = afterEss + 1;
+
+        if (statusEl) {
+            statusEl.innerText = `⚠️ 未收到封包，精華已回補+1 (已累計 ${attemptNum} 次，每 1 分鐘再測)`;
+            statusEl.style.color = '#e74c3c';
+        }
+
+        if (attemptNum % PROBE_ALERT_EVERY_COUNT === 0) {
+            await sendTelegramNotice(`⚠️ D2 Survivors 警告：連線異常已累計 ${attemptNum} 次（約 ${attemptNum} 分鐘），點擊打勾仍未收到新封包。`);
+        }
+    }
+
+    async function handleReconnectConfirmedAutoResume(pktItem) {
+        if (!netState.isDisconnected) return;
+        stopPassiveProbeLoop();
+        netState.isDisconnected = false;
+        netState.initialAlertSent = false;
+        netState.retryFailCount = 0;
+        netState.lastActivityTime = Date.now();
+
+        if (pktItem && pktItem.json && pktItem.json.forge && pktItem.json.forge.t) {
+            window.__dsLatestForgeT = pktItem.json.forge.t;
+        }
+        updateUIOnPacket(pktItem ? pktItem.json : null, pktItem ? pktItem.raw : '重連打勾已收到封包');
+
+        reverseSyncCurrentCountsToCustomInputs();
+
+        const statusEl = document.getElementById('ds-status');
+        if (statusEl) {
+            statusEl.innerText = '✅ 重連確認成功！已反向同步次數，準備自動接續淬煉...';
+            statusEl.style.color = '#58d68d';
+        }
+        await sendTelegramNotice('✅ D2 Survivors 通知：重連打勾已收到封包，已自動同步次數並接續淬煉！');
+
+        triggerDisconnectResume();
+    }
+
+    function startPassiveProbeLoop() {
+        if (netState.probeTimer) return;
+        netState.probeTimer = setInterval(() => {
+            runRealClickReconnectCheckOnce();
+        }, PROBE_INTERVAL_MS);
+    }
+
+    async function markConnectionLost(reasonText = '') {
+        if (!isInTemperInterface()) {
+            await stopForNotInTemperInterface(`偵測異常時不在介面(${reasonText})`);
+            return;
+        }
+        const wasAlreadyDisconnected = netState.isDisconnected;
+        netState.isDisconnected = true;
+        if (!wasAlreadyDisconnected) {
+            netState.retryFailCount = 0;
+        }
+        if (!netState.initialAlertSent) {
+            netState.initialAlertSent = true;
+            await sendTelegramNotice('⚠️ D2 Survivors 警告：網路連線異常，無法連接伺服器！');
+        }
+        startPassiveProbeLoop();
+        const statusEl = document.getElementById('ds-status');
+        if (statusEl) {
+            statusEl.innerText = `⚠️ 網路連線異常${reasonText ? ` (${reasonText})` : ''}，每 1 分鐘打勾檢測中`;
+            statusEl.style.color = '#e74c3c';
+        }
+    }
+
+    async function markConnectionRecovered(pktItem, reasonLabel = '已收到淬煉封包，恢復連線') {
+        if (!netState.isDisconnected) return;
+        stopPassiveProbeLoop();
+        netState.isDisconnected = false;
+        netState.initialAlertSent = false;
+        netState.retryFailCount = 0;
+        netState.lastActivityTime = Date.now();
+        window.__dsReconnectCount++;
+        updateUIOnPacket(pktItem ? pktItem.json : null, pktItem ? pktItem.raw : reasonLabel);
+        const statusEl = document.getElementById('ds-status');
+        if (statusEl) {
+            statusEl.innerText = '✅ 連線已恢復！可校正後按「斷線繼續淬煉」';
+            statusEl.style.color = '#58d68d';
+        }
+        await sendTelegramNotice('✅ D2 Survivors 通知：網路連線已恢復！');
+    }
+
+    function parseAffixPool(rawStr) {
+        let poolSet = new Set();
+        if (!rawStr) return [];
+        let parts = rawStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        parts.forEach(part => {
+            if (part.includes('-')) {
+                let rangeParts = part.split('-').map(s => s.trim());
+                if (rangeParts.length === 2) {
+                    let prefix = rangeParts[0].replace(/[0-9]/g, '');
+                    let startNum = parseInt(rangeParts[0].replace(/[^0-9]/g, ''));
+                    let endNum = parseInt(rangeParts[1].replace(/[^0-9]/g, ''));
+                    if (!isNaN(startNum) && !isNaN(endNum) && startNum <= endNum) {
+                        for (let i = startNum; i <= endNum; i++) {
+                            poolSet.add(prefix + i);
+                        }
+                    }
+                }
+            } else {
+                poolSet.add(part);
+            }
+        });
+        return Array.from(poolSet);
+    }
+
+    function updateUIOnPacket(jsonObj, rawStr) {
+        const trackerEl = document.getElementById('ds-forge-tracker');
+        const mode = document.getElementById('ds-mode-select') ? document.getElementById('ds-mode-select').value : '1';
+        const affix1 = document.getElementById('ds-target-affix1') ? document.getElementById('ds-target-affix1').value.trim().toLowerCase() : '';
+        const affix2 = document.getElementById('ds-target-affix2') ? document.getElementById('ds-target-affix2').value.trim().toLowerCase() : '';
+        
+        let c1 = (affix1 && window.__dsLatestForgeT[affix1]) ? window.__dsLatestForgeT[affix1] : 0;
+        let c2 = (affix2 && window.__dsLatestForgeT[affix2]) ? window.__dsLatestForgeT[affix2] : 0;
+        let totalTries = 0;
+        for (let k in window.__dsLatestForgeT) { totalTries += (parseInt(window.__dsLatestForgeT[k]) || 0); }
+
+        if (trackerEl) {
+            let trackerStr = '裝備詞條狀態：';
+            const keys = Object.keys(window.__dsLatestForgeT);
+            if (keys.length > 0) {
+                trackerStr += keys.map(k => `${k}: ${window.__dsLatestForgeT[k]}次`).join(' | ');
+            } else {
+                trackerStr += '等待封包同步...';
+            }
+            trackerEl.innerText = trackerStr;
+        }
+
+        const progressEl = document.getElementById('ds-progress');
+        if (progressEl) {
+            if (mode === '2') {
+                const rawPool = document.getElementById('ds-target-pool') ? document.getElementById('ds-target-pool').value : '';
+                const poolArr = parseAffixPool(rawPool);
+                let poolSum = 0;
+                poolArr.forEach(p => { poolSum += (window.__dsLatestForgeT[p] || 0); });
+                progressEl.innerText = `總淬煉次數：${totalTries}/10 | 詞條池命中總數：${poolSum}次`;
+            } else {
+                progressEl.innerText = `總淬煉次數：${totalTries}/10 | 命中統計：目標1(${affix1 || '無'}):${c1}次, 目標2(${affix2 || '無'}):${c2}次`;
+            }
+        }
+
+        const statsFooterEl = document.getElementById('ds-stats-footer');
+        if (statsFooterEl) {
+            statsFooterEl.innerText = `重置輪數 : ${window.__dsResetCount} | 斷線重啟次數 : ${window.__dsReconnectCount}`;
+        }
+
+        let serverOutcome = 'unknown';
+        let serverLine = '';
+        try {
+            if (jsonObj) {
+                if (jsonObj.outcome) serverOutcome = String(jsonObj.outcome).trim().toLowerCase();
+                if (jsonObj.line) serverLine = String(jsonObj.line).trim().toLowerCase();
+            }
+        } catch (e) {}
+
+        let matchedText = '無';
+        let matchedColor = '#5dade2';
+
+        if (serverOutcome === 'took') {
+            if (mode === '1') {
+                if (affix1 && serverLine === affix1) {
+                    matchedText = `🎉 命中目標 1 (${affix1})！`;
+                    matchedColor = '#58d68d';
+                } else if (affix2 && serverLine === affix2) {
+                    matchedText = `🎉 命中目標 2 (${affix2})！`;
+                    matchedColor = '#58d68d';
+                } else {
+                    matchedText = `未中指定目標 (line: ${serverLine || 'none'})`;
+                    matchedColor = '#e59866';
+                }
+            } else {
+                const rawPool = document.getElementById('ds-target-pool') ? document.getElementById('ds-target-pool').value : '';
+                const pool = parseAffixPool(rawPool);
+                if (pool.includes(serverLine)) {
+                    matchedText = `🎉 命中目標池詞條 (${serverLine})！`;
+                    matchedColor = '#58d68d';
+                } else {
+                    matchedText = `未中目標池 (line: ${serverLine || 'none'})`;
+                    matchedColor = '#e59866';
+                }
+            }
+        } else if (serverOutcome === 'missed' || serverOutcome === 'miss') {
+            matchedText = `精煉失敗 (missed)`;
+            matchedColor = '#e59866';
+        }
+
+        const matchedEl = document.getElementById('ds-matched');
+        if (matchedEl) {
+            matchedEl.innerText = `匹配詞條：${matchedText}`;
+            matchedEl.style.color = matchedColor;
+        }
+
+        const debugEl = document.getElementById('ds-debug');
+        if (debugEl) {
+            debugEl.innerText = rawStr;
+            debugEl.style.color = serverOutcome === 'took' ? '#58d68d' : '#e59866';
+        }
+    }
+
+    const analyzeData = (data, httpStatus = 200) => {
+        try {
+            let rawStr = (typeof data === 'string') ? data : JSON.stringify(data);
+            let jsonObj = null;
+            if (typeof data === 'string') {
+                try { jsonObj = JSON.parse(data); } catch (e) {}
+            } else {
+                jsonObj = data;
+            }
+
+            if (hasServerDisconnectSignal(jsonObj, rawStr, httpStatus)) {
+                markConnectionLost(httpStatus ? `HTTP ${httpStatus}` : '伺服器提示');
+            } else {
+                netState.lastActivityTime = Date.now();
+            }
+
+            if (isTemperPacket(jsonObj, rawStr)) {
+                if (jsonObj && jsonObj.forge && jsonObj.forge.t) {
+                    window.__dsLatestForgeT = jsonObj.forge.t;
+                }
+                const pktItem = { json: jsonObj, raw: rawStr, time: Date.now(), isTemper: true };
+                window.__dsPacketLog.push(pktItem);
+                if (window.__dsPacketLog.length > 50) window.__dsPacketLog.shift();
+                updateUIOnPacket(jsonObj, rawStr);
+
+                if (netState.isDisconnected && !netState.probeInFlight) {
+                    markConnectionRecovered(pktItem);
+                }
+            }
+        } catch (e) {}
+    };
+
+    if (!window.__dsXhrHooked) {
+        window.__dsXhrHooked = true;
+        const origOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) { this._url = url; return origOpen.apply(this, arguments); };
+        const origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function (body) {
+            const url = this._url || '';
+            if (!url.match(/\.(png|jpg|jpeg|mp3|ogg|wav|wasm|js|css)$/i)) {
+                this.addEventListener('load', function () {
+                    try {
+                        analyzeData(this.responseText || '', this.status);
+                    } catch (e) {}
+                });
+                this.addEventListener('error', function () {
+                    markConnectionLost('XHR 錯誤');
+                });
+                this.addEventListener('timeout', function () {
+                    markConnectionLost('XHR 逾時');
+                });
+            }
+            return origSend.apply(this, arguments);
+        };
+    }
+
+    if (!window.__dsFetchHooked) {
+        window.__dsFetchHooked = true;
+        const origFetch = window.fetch;
+        window.fetch = async function (resource, init) {
+            const url = (typeof resource === 'string') ? resource : (resource && resource.url ? resource.url : '');
+            try {
+                const response = await origFetch.apply(this, arguments);
+                if (url && !url.match(/\.(png|jpg|jpeg|mp3|ogg|wav|wasm|js|css)$/i)) {
+                    const clone = response.clone();
+                    clone.text().then(text => analyzeData(text, response.status)).catch(() => {
+                        if (!response.ok && (response.status >= 500 || response.status === 408 || response.status === 429)) {
+                            markConnectionLost(`HTTP ${response.status}`);
+                        }
+                    });
+                } else if (!response.ok && (response.status >= 500 || response.status === 408 || response.status === 429)) {
+                    markConnectionLost(`HTTP ${response.status}`);
+                }
+                return response;
+            } catch (err) {
+                await markConnectionLost('網路請求失敗');
+                throw err;
+            }
+        };
+    }
+
+    const panel = document.createElement('div');
+    panel.id = 'ds-temper-helper';
+    panel.style.cssText = `
+        position: fixed; top: 10px; left: 10px; width: 360px;
+        background: rgba(24, 18, 12, 0.95); border: 1px solid #7a5c32;
+        border-radius: 6px; color: #e6d5b8; font-family: "Microsoft JhengHei", sans-serif;
+        font-size: 12px; z-index: 999999; box-shadow: 0 4px 20px rgba(0,0,0,0.8); user-select: none;
+    `;
+
+    panel.innerHTML = `
+        <div id="ds-header" style="padding: 6px 10px; background: #261b10; border-bottom: 1px solid #4a351d; display: flex; justify-content: space-between; align-items: center; cursor: move; border-radius: 6px 6px 0 0;">
+            <span id="ds-title-text" style="font-weight: bold; color: #f0c065; font-size: 13px;">⚒️ 自動淬煉助手 v47.41</span>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <span id="ds-minimize" style="cursor: pointer; color: #f0c065; font-weight: bold; font-size: 13px; padding: 0 3px; background: #3a2a18; border: 1px solid #6e502b; border-radius: 3px;" title="縮小/展開">➖</span>
+                <span id="ds-close" style="cursor: pointer; color: #aaa; font-weight: bold; padding: 0 2px;" title="關閉">✕</span>
+            </div>
+        </div>
+        <div id="ds-body-content" style="padding: 8px; display: flex; flex-direction: column; gap: 5px;">
+            <div style="background: #1c140c; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                <label style="color: #f0c065; font-weight: bold;">⚙️ 淬煉模式：</label>
+                <select id="ds-mode-select" style="background: #120d08; border: 1px solid #4a351d; color: #f0c065; padding: 2px 4px; border-radius: 3px; font-size: 12px;">
+                    <option value="1">模式一 : 獨立雙目標設定</option>
+                    <option value="2">模式二 : 多詞條共同池設定</option>
+                </select>
+            </div>
+            <div id="ds-mode1-box" style="background: #1c140c; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="color: #f0c065;">🎯 目標 1 (詞條 / 次數)：</label>
+                    <div>
+                        <input id="ds-target-affix1" type="text" value="s0" style="width: 50px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;">
+                        <input id="ds-target-hits1" type="number" value="2" min="1" max="10" style="width: 30px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;">
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="color: #f0c065;">🎯 目標 2 (留空略過)：</label>
+                    <div>
+                        <input id="ds-target-affix2" type="text" value="" placeholder="選填" style="width: 50px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;">
+                        <input id="ds-target-hits2" type="number" value="1" min="1" max="10" style="width: 30px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;">
+                    </div>
+                </div>
+            </div>
+            <div id="ds-mode2-box" style="background: #1c140c; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; display: none; flex-direction: column; gap: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="color: #f0c065;" title="支援逗號(s0,s1)或範圍(s0-s4)">🎯 詞條池 (支援s0-s4或逗號)：</label>
+                    <input id="ds-target-pool" type="text" value="s0-s4" style="width: 90px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;" placeholder="例: s0-s4">
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="color: #f0c065;">🎯 共同需要總次數：</label>
+                    <input id="ds-target-pool-hits" type="number" value="2" min="1" max="10" style="width: 45px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;">
+                </div>
+            </div>
+            <div style="background: #1c140c; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                <label style="color: #f0c065;">💎 恐懼精華剩餘數量：</label>
+                <input id="ds-essence-count" type="number" value="30" min="0" max="9999" style="width: 50px; background: #120d08; border: 1px solid #4a351d; color: #58d68d; font-weight: bold; text-align: center;">
+            </div>
+            <div style="background: #1c140c; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; font-size: 11px; display: flex; flex-direction: column; gap: 3px;">
+                <div style="color: #5dade2; font-weight: bold;">📱 Telegram 設定</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Token:</span> <input id="ds-tg-token" type="text" value="${state.tgToken}" style="width: 240px; background: #120d08; border: 1px solid #4a351d; color: #fff; font-size: 10px;">
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Chat ID:</span> <input id="ds-tg-chatid" type="text" value="${state.tgChatId}" style="width: 240px; background: #120d08; border: 1px solid #4a351d; color: #fff; font-size: 10px;">
+                </div>
+            </div>
+            <div style="background: #1c140c; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+                <div style="color: #5dade2;">🔧 斷線後手動進度校正</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
+                    <span>目標1: <input id="ds-sync-hits1" type="number" value="0" min="0" max="10" style="width: 34px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;"></span>
+                    <span>目標2: <input id="ds-sync-hits2" type="number" value="0" min="0" max="10" style="width: 34px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;"></span>
+                    <span>已淬煉: <input id="ds-sync-total" type="number" value="0" min="0" max="10" style="width: 34px; background: #120d08; border: 1px solid #4a351d; color: #fff; text-align: center;"></span>
+                </div>
+                <button id="ds-disconnect-resume-btn" style="width: 100%; padding: 4px; background: #1e3547; border: 1px solid #4a82ad; color: #8ed0ff; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 11px;">
+                    🔄 斷線繼續淬煉
+                </button>
+            </div>
+            <div style="background: #1c140c; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; font-size: 11px;">
+                <div style="color: #5dade2; margin-bottom: 2px;">座標設定 (點擊按鈕後點擊遊戲畫面)</div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span id="ds-pos-charsi">1. 恰西: ${state.charsiPos.x}, ${state.charsiPos.y}</span> <button id="ds-cal-charsi" style="background: #3a2a18; color: #f0c065; border: 1px solid #7a5c32; cursor: pointer;">設置</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span id="ds-pos-npc-temper">2. 淬煉選單: ${state.npcTemperPos.x}, ${state.npcTemperPos.y}</span> <button id="ds-cal-npc-temper" style="background: #2a3a18; color: #b5f065; border: 1px solid #5c7a32; cursor: pointer;">設置</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span id="ds-pos-npc-clear">3. 清除選單: ${state.npcClearPos.x}, ${state.npcClearPos.y}</span> <button id="ds-cal-npc-clear" style="background: #3a1818; color: #f06565; border: 1px solid #7a3232; cursor: pointer;">設置</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span id="ds-pos-temper">4. 介面打勾[✓]: ${state.temperPos.x}, ${state.temperPos.y}</span> <button id="ds-cal-temper" style="background: #2a3a18; color: #b5f065; border: 1px solid #5c7a32; cursor: pointer;">設置</button>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span id="ds-pos-cancel">5. 介面禁止[⊘]: ${state.cancelPos.x}, ${state.cancelPos.y}</span> <button id="ds-cal-cancel" style="background: #3a1818; color: #f06565; border: 1px solid #7a3232; cursor: pointer;">設置</button>
+                </div>
+            </div>
+            <div style="background: #140e09; border: 1px solid #3d2b16; padding: 5px 8px; border-radius: 4px; font-size: 11px; line-height: 1.4;">
+                <div id="ds-status" style="color: #e09f3e;">狀態：待機中 (v47.41)</div>
+                <div id="ds-progress">總淬煉次數：0/10 | 命中統計：目標1:0次, 目標2:0次</div>
+                <div id="ds-matched" style="color: #5dade2;">匹配詞條：無</div>
+                <div style="color: #f39c12; font-weight: bold;" id="ds-forge-tracker">裝備狀態：等待封包同步</div>
+                <div id="ds-debug" style="background: #0a0705; border: 1px solid #2b1e10; padding: 2px; max-height: 28px; overflow-y: auto; color: #ccc;">等待操作...</div>
+                <div id="ds-stats-footer" style="color: #e09f3e; margin-top: 3px; border-top: 1px dashed #3d2b16; padding-top: 2px;">重置輪數 : 0 | 斷線重啟次數 : 0</div>
+            </div>
+            <button id="ds-toggle-btn" style="width: 100%; padding: 7px; background: linear-gradient(180deg, #4a351d 0%, #2e2010 100%); border: 1px solid #9c7640; color: #f5d08a; font-weight: bold; font-size: 13px; border-radius: 4px; cursor: pointer;">
+                ▶ 開始自動淬煉
+            </button>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    let isMinimized = false;
+    document.getElementById('ds-minimize').onclick = () => {
+        isMinimized = !isMinimized;
+        const bodyContent = document.getElementById('ds-body-content');
+        const minBtn = document.getElementById('ds-minimize');
+        const titleText = document.getElementById('ds-title-text');
+        if (isMinimized) {
+            bodyContent.style.display = 'none';
+            minBtn.innerText = '➕';
+            panel.style.width = '200px';
+            titleText.innerText = '⚒️ 助手 (已收納)';
+        } else {
+            bodyContent.style.display = 'flex';
+            minBtn.innerText = '➖';
+            panel.style.width = '360px';
+            titleText.innerText = '⚒️ 自動淬煉助手 v47.41';
+        }
+    };
+
+    document.getElementById('ds-tg-token').onchange = (e) => localStorage.setItem('ds_tg_token', e.target.value.trim());
+    document.getElementById('ds-tg-chatid').onchange = (e) => localStorage.setItem('ds_tg_chatid', e.target.value.trim());
+    document.getElementById('ds-mode-select').onchange = (e) => {
+        document.getElementById('ds-mode1-box').style.display = e.target.value === '1' ? 'flex' : 'none';
+        document.getElementById('ds-mode2-box').style.display = e.target.value === '2' ? 'flex' : 'none';
+        updateUIOnPacket(null, '切換模式');
+    };
+
+    function startCalibration(type, label) {
+        state.calibrating = type;
+        document.getElementById('ds-status').innerText = `請點擊【${label}】位置...`;
+    }
+    document.getElementById('ds-cal-charsi').onclick = () => startCalibration('charsi', '恰西');
+    document.getElementById('ds-cal-npc-temper').onclick = () => startCalibration('npcTemper', '淬煉選單');
+    document.getElementById('ds-cal-npc-clear').onclick = () => startCalibration('npcClear', '清除選單');
+    document.getElementById('ds-cal-temper').onclick = () => startCalibration('temper', '打勾[✓]');
+    document.getElementById('ds-cal-cancel').onclick = () => startCalibration('cancel', '禁止[⊘]');
+
+    window.addEventListener('click', (e) => {
+        if (!state.calibrating || panel.contains(e.target)) return;
+        e.stopPropagation(); e.preventDefault();
+        const pos = { x: Math.round(e.clientX), y: Math.round(e.clientY) };
+        if (state.calibrating === 'charsi') { state.charsiPos = pos; localStorage.setItem('ds_charsi_pos', JSON.stringify(pos)); document.getElementById('ds-pos-charsi').innerText = `1. 恰西: ${pos.x}, ${pos.y}`; }
+        else if (state.calibrating === 'npcTemper') { state.npcTemperPos = pos; localStorage.setItem('ds_npc_temper_pos', JSON.stringify(pos)); document.getElementById('ds-pos-npc-temper').innerText = `2. 淬煉選單: ${pos.x}, ${pos.y}`; }
+        else if (state.calibrating === 'npcClear') { state.npcClearPos = pos; localStorage.setItem('ds_npc_clear_pos', JSON.stringify(pos)); document.getElementById('ds-pos-npc-clear').innerText = `3. 清除選單: ${pos.x}, ${pos.y}`; }
+        else if (state.calibrating === 'temper') { state.temperPos = pos; localStorage.setItem('ds_temper_pos', JSON.stringify(pos)); document.getElementById('ds-pos-temper').innerText = `4. 介面打勾[✓]: ${pos.x}, ${pos.y}`; }
+        else if (state.calibrating === 'cancel') { state.cancelPos = pos; localStorage.setItem('ds_cancel_pos', JSON.stringify(pos)); document.getElementById('ds-pos-cancel').innerText = `5. 介面禁止[⊘]: ${pos.x}, ${pos.y}`; }
+        state.calibrating = null;
+        document.getElementById('ds-status').innerText = '座標設置完成';
+    }, true);
+
+    function applyAndResetManualCalibrationCounts() {
+        const hits1El = document.getElementById('ds-sync-hits1');
+        const hits2El = document.getElementById('ds-sync-hits2');
+        const totalEl = document.getElementById('ds-sync-total');
+
+        const s1 = Math.max(0, parseInt(hits1El ? hits1El.value : 0) || 0);
+        const s2 = Math.max(0, parseInt(hits2El ? hits2El.value : 0) || 0);
+        const stotal = Math.max(0, parseInt(totalEl ? totalEl.value : 0) || 0);
+
+        const affix1 = document.getElementById('ds-target-affix1').value.trim().toLowerCase();
+        const affix2 = document.getElementById('ds-target-affix2').value.trim().toLowerCase();
+
+        const nextForgeT = {};
+        if (affix1 && s1 > 0) nextForgeT[affix1] = s1;
+        if (affix2 && s2 > 0) nextForgeT[affix2] = s2;
+
+        const currentHitSum = Object.values(nextForgeT).reduce((acc, v) => acc + (parseInt(v) || 0), 0);
+        const remainingTries = Math.max(0, stotal - currentHitSum);
+        if (remainingTries > 0) {
+            nextForgeT['_other'] = remainingTries;
+        }
+
+        window.__dsLatestForgeT = nextForgeT;
+
+        if (hits1El) hits1El.value = 0;
+        if (hits2El) hits2El.value = 0;
+        if (totalEl) totalEl.value = 0;
+
+        updateUIOnPacket(null, '斷線校正同步並清零輸入框');
+    }
+
+    document.getElementById('ds-disconnect-resume-btn').onclick = () => {
+        triggerDisconnectResume();
+    };
+
+    document.getElementById('ds-close').onclick = () => {
+        state.running = false;
+        stopPassiveProbeLoop();
+        panel.remove();
+    };
+
+    function simulateClick(x, y) {
+        const target = document.elementFromPoint(x, y);
+        if (!target) return;
+        const opt = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0, buttons: 1 };
+        target.dispatchEvent(new PointerEvent('pointerdown', opt));
+        target.dispatchEvent(new MouseEvent('mousedown', opt));
+        setTimeout(() => {
+            target.dispatchEvent(new PointerEvent('pointerup', opt));
+            target.dispatchEvent(new MouseEvent('mouseup', opt));
+            target.dispatchEvent(new MouseEvent('click', opt));
+        }, 60);
+    }
+
+    const sleep = async (ms) => {
+        const start = Date.now();
+        while (Date.now() - start < ms) { if (!state.running) break; await new Promise(r => setTimeout(r, 50)); }
+    };
+
+    async function waitForOutcome(targetOutcome, timeoutMs = 4000) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            if (!state.running) break;
+            const last = window.__dsPacketLog[window.__dsPacketLog.length - 1];
+            if (last && last.json && String(last.json.outcome).trim().toLowerCase() === targetOutcome.toLowerCase()) {
+                return last;
+            }
+            await sleep(50);
+        }
+        return null;
+    }
+
+    async function executeClearRoutine() {
+        window.__dsResetCount = (window.__dsResetCount || 0) + 1;
+        document.getElementById('ds-status').innerText = `⚠️ 執行清除程序 (第${window.__dsResetCount}輪)`;
+
+        const essenceInput = document.getElementById('ds-essence-count');
+        if (essenceInput) {
+            let currentEss = parseInt(essenceInput.value) || 0;
+            if (currentEss > 0) essenceInput.value = currentEss - 1;
+        }
+
+        simulateClick(state.cancelPos.x, state.cancelPos.y); await sleep(1000);
+        if (!state.running) return;
+        simulateClick(state.charsiPos.x, state.charsiPos.y); await sleep(1200);
+        if (!state.running) return;
+        simulateClick(state.npcClearPos.x, state.npcClearPos.y); await sleep(600);
+        if (!state.running) return;
+
+        if (!isInTemperInterface()) {
+            await stopForNotInTemperInterface('清除點擊打勾前');
+            return;
+        }
+
+        simulateClick(state.temperPos.x, state.temperPos.y); await sleep(300);
+        simulateClick(state.temperPos.x, state.temperPos.y); 
+
+        await waitForOutcome('cleaned', 5000);
+        await sleep(400);
+
+        // 點擊禁止關閉介面，若仍在介面中則再點一次，上限 5 次
+        simulateClick(state.cancelPos.x, state.cancelPos.y); await sleep(1200);
+        if (!state.running) return;
+
+        let closeRetry = 0;
+        while (state.running && isInTemperInterface()) {
+            closeRetry++;
+            if (closeRetry > CLEAR_CLOSE_MAX_RETRY) {
+                state.running = false;
+                const statusEl = document.getElementById('ds-status');
+                if (statusEl) {
+                    statusEl.innerText = `🛑 清除後仍在介面已達 ${CLEAR_CLOSE_MAX_RETRY} 次上限，已停止防卡死！`;
+                    statusEl.style.color = '#e74c3c';
+                }
+                await sendTelegramNotice(`⚠️ D2 Survivors 警告：清除程序點擊禁止重試已達 ${CLEAR_CLOSE_MAX_RETRY} 次仍未離開介面，已自動停止以避免卡死！`);
+                return;
+            }
+            const statusEl = document.getElementById('ds-status');
+            if (statusEl) {
+                statusEl.innerText = `⚠️ 仍在介面中，重試點擊禁止 (${closeRetry}/${CLEAR_CLOSE_MAX_RETRY})...`;
+            }
+            simulateClick(state.cancelPos.x, state.cancelPos.y);
+            await sleep(900);
+        }
+
+        await sleep(800);
+        window.__dsLatestForgeT = {};
+        updateUIOnPacket(null, '輪數重置');
+    }
+
+    async function runLoop(options = {}) {
+        const btn = document.getElementById('ds-toggle-btn');
+        btn.innerText = '⏹ 停止自動淬煉';
+        btn.style.background = 'linear-gradient(180deg, #6e2626 0%, #421414 100%)';
+
+        let allowSkipNpcOnce = Boolean(options.skipNpcOpenIfInInterface);
+
+        while (state.running) {
+            let totalTries = 0;
+            const forgeT = window.__dsLatestForgeT;
+            for (let k in forgeT) { totalTries += (parseInt(forgeT[k]) || 0); }
+
+            if (totalTries >= 10) {
+                await executeClearRoutine();
+                allowSkipNpcOnce = false;
+                continue;
+            }
+
+            const mode = document.getElementById('ds-mode-select').value;
+            const affix1 = document.getElementById('ds-target-affix1').value.trim().toLowerCase();
+            const hits1 = parseInt(document.getElementById('ds-target-hits1').value) || 1;
+            const affix2 = document.getElementById('ds-target-affix2').value.trim().toLowerCase();
+            const hits2 = parseInt(document.getElementById('ds-target-hits2').value) || 1;
+            const poolHits = parseInt(document.getElementById('ds-target-pool-hits').value) || 1;
+
+            if (totalTries === 0 && Object.keys(forgeT).length === 0) {
+                if (!isInTemperInterface()) {
+                    document.getElementById('ds-status').innerText = '與恰西對話中...';
+                    simulateClick(state.charsiPos.x, state.charsiPos.y); await sleep(1500);
+                    if (!state.running) break;
+                    document.getElementById('ds-status').innerText = '點擊選單[淬煉]...';
+                    simulateClick(state.npcTemperPos.x, state.npcTemperPos.y); await sleep(800);
+                    if (!state.running) break;
+                }
+            } else if (!allowSkipNpcOnce && !isInTemperInterface()) {
+                document.getElementById('ds-status').innerText = '與恰西對話中...';
+                simulateClick(state.charsiPos.x, state.charsiPos.y); await sleep(1500);
+                if (!state.running) break;
+                document.getElementById('ds-status').innerText = '點擊選單[淬煉]...';
+                simulateClick(state.npcTemperPos.x, state.npcTemperPos.y); await sleep(800);
+                if (!state.running) break;
+            }
+            allowSkipNpcOnce = false;
+
+            if (!isInTemperInterface()) {
+                await stopForNotInTemperInterface('點擊打勾前');
+                break;
+            }
+
+            const essenceInput = document.getElementById('ds-essence-count');
+            let currentEssence = parseInt(essenceInput ? essenceInput.value : 0) || 0;
+            if (currentEssence <= 0) {
+                state.running = false;
+                document.getElementById('ds-status').innerText = '❌ 恐懼精華已歸零！';
+                await sendTelegramNotice('⚠️ D2 Survivors 助手警示：恐懼精華已耗盡歸零，自動停止掛網！');
+                break;
+            }
+            essenceInput.value = --currentEssence;
+
+            const packetStartTime = Date.now();
+            document.getElementById('ds-status').innerText = `執行淬煉 (精華剩餘:${currentEssence})...`;
+            simulateClick(state.temperPos.x, state.temperPos.y);
+
+            let targetPacket = null, start = Date.now();
+            while (Date.now() - start < 4500) {
+                if (!state.running) break;
+                const pkts = window.__dsPacketLog;
+                for (let i = pkts.length - 1; i >= 0; i--) {
+                    if (pkts[i].time >= packetStartTime && pkts[i].isTemper) {
+                        targetPacket = pkts[i];
+                        break;
+                    }
+                }
+                if (targetPacket) break;
+                await sleep(50);
+            }
+
+            if (!state.running) break;
+
+            if (!targetPacket) {
+                if (!isInTemperInterface()) {
+                    await stopForNotInTemperInterface('封包逾時且不在介面');
+                    break;
+                }
+                state.running = false;
+                await markConnectionLost('淬煉封包逾時無回應');
+                break;
+            }
+
+            let c1 = (affix1 && forgeT[affix1]) ? forgeT[affix1] : 0;
+            let c2 = (affix2 && forgeT[affix2]) ? forgeT[affix2] : 0;
+            let remTries = 10 - totalTries;
+
+            let needMore = false;
+            if (mode === '1') {
+                let n1 = affix1 ? Math.max(0, hits1 - c1) : 0;
+                let n2 = affix2 ? Math.max(0, hits2 - c2) : 0;
+                if (remTries < (n1 + n2)) needMore = true;
+            } else {
+                const rawPool = document.getElementById('ds-target-pool').value;
+                const pool = parseAffixPool(rawPool);
+                let poolSum = 0;
+                pool.forEach(p => { poolSum += (forgeT[p] || 0); });
+                if (remTries < Math.max(0, poolHits - poolSum)) needMore = true;
+            }
+
+            if (needMore) {
+                document.getElementById('ds-status').innerText = '🛑 止損觸發：剩餘次數不足，執行清除...';
+                await executeClearRoutine();
+                continue;
+            }
+
+            let isComplete = false;
+            if (mode === '1') {
+                if (affix1 || affix2) {
+                    if ((!affix1 || c1 >= hits1) && (!affix2 || c2 >= hits2)) isComplete = true;
+                }
+            } else {
+                const rawPool = document.getElementById('ds-target-pool').value;
+                const pool = parseAffixPool(rawPool);
+                let poolSum = 0;
+                pool.forEach(p => { poolSum += (forgeT[p] || 0); });
+                if (poolSum >= poolHits) isComplete = true;
+            }
+
+            if (isComplete) {
+                state.running = false;
+                document.getElementById('ds-status').innerText = '🎉 目標完全達成！';
+                await sendTelegramNotice('🎉 D2 Survivors 捷報：自動淬煉目標已完全達成！快回遊戲收割裝備！');
+                break;
+            }
+            await sleep(400);
+        }
+
+        btn.innerText = '▶ 開始自動淬煉';
+        btn.style.background = 'linear-gradient(180deg, #4a351d 0%, #2e2010 100%)';
+    }
+
+    document.getElementById('ds-toggle-btn').onclick = () => {
+        if (state.running) {
+            state.running = false;
+        } else {
+            if (parseInt(document.getElementById('ds-essence-count').value) <= 0) {
+                document.getElementById('ds-status').innerText = '❌ 恐懼精華不可為 0！'; return;
+            }
+            stopPassiveProbeLoop();
+            window.__dsLatestForgeT = {};
+            netState.isDisconnected = false;
+            netState.initialAlertSent = false;
+            netState.retryFailCount = 0;
+            updateUIOnPacket(null, '重新開始，狀態已歸零');
+            document.getElementById('ds-status').innerText = '🔄 狀態已重置，準備從點擊 NPC 開始...';
+            state.running = true;
+            runLoop({ skipNpcOpenIfInInterface: false });
+        }
+    };
+})();
