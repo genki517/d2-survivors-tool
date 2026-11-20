@@ -1,4 +1,8 @@
 (function () {
+    // 若先前已有實例，先清理舊的定時器與面板，避免重複執行導致速度異常或亂點
+    if (window.__dsTemperCleanup && typeof window.__dsTemperCleanup === 'function') {
+        try { window.__dsTemperCleanup(); } catch (e) {}
+    }
     if (document.getElementById('ds-temper-helper')) {
         document.getElementById('ds-temper-helper').remove();
     }
@@ -51,8 +55,16 @@
         netState.probeInFlight = false;
     }
 
+    window.__dsTemperCleanup = () => {
+        state.running = false;
+        stopPassiveProbeLoop();
+        const el = document.getElementById('ds-temper-helper');
+        if (el) el.remove();
+    };
+
     function isInTemperInterface() {
         const helper = document.getElementById('ds-temper-helper');
+        const master = document.getElementById('d2s-master-host-panel');
         const testBox = document.getElementById('ds-ui-detector-test');
         const probeBox = document.getElementById('ds-probe-test');
         const els = Array.from(document.querySelectorAll('div, button, span, p, label, canvas'));
@@ -61,6 +73,7 @@
         for (const el of els) {
             if (!el) continue;
             if (helper && helper.contains(el)) continue;
+            if (master && master.contains(el)) continue;
             if (testBox && testBox.contains(el)) continue;
             if (probeBox && probeBox.contains(el)) continue;
             const style = window.getComputedStyle(el);
@@ -72,6 +85,7 @@
 
         let cleanText = (document.body && document.body.innerText) ? document.body.innerText : '';
         if (helper && helper.innerText) cleanText = cleanText.replace(helper.innerText, '');
+        if (master && master.innerText) cleanText = cleanText.replace(master.innerText, '');
         if (testBox && testBox.innerText) cleanText = cleanText.replace(testBox.innerText, '');
         if (probeBox && probeBox.innerText) cleanText = cleanText.replace(probeBox.innerText, '');
         const hasStackNumberText = /\b\d{1,3}\b/.test(cleanText.trim());
@@ -121,7 +135,6 @@
         return false;
     }
 
-    // 反向同步目前淬煉與命中次數至自定義校正輸入框
     function reverseSyncCurrentCountsToCustomInputs() {
         const hits1El = document.getElementById('ds-sync-hits1');
         const hits2El = document.getElementById('ds-sync-hits2');
@@ -144,7 +157,6 @@
         if (totalEl) totalEl.value = Math.min(10, Math.max(0, totalTries));
     }
 
-    // 觸發「斷線繼續淬煉」接續流程（套用自定義次數、清零輸入框並接續）
     function triggerDisconnectResume() {
         if (parseInt(document.getElementById('ds-essence-count').value) <= 0) {
             document.getElementById('ds-status').innerText = '❌ 恐懼精華不可為 0！';
@@ -165,7 +177,6 @@
         return true;
     }
 
-    // 改為點擊打勾發送真實封包進行確認；未收到新封包則精華回補 1
     async function runRealClickReconnectCheckOnce() {
         if (!netState.isDisconnected || netState.probeInFlight) return;
         if (!isInTemperInterface()) {
@@ -188,7 +199,6 @@
         netState.retryFailCount++;
         const attemptNum = netState.retryFailCount;
 
-        // 暫扣 1 顆精華執行打勾測試，若未收到新封包會回補 1
         essenceInput.value = currentEssence - 1;
         const checkStartTime = Date.now();
         const statusEl = document.getElementById('ds-status');
@@ -217,7 +227,6 @@
         netState.probeInFlight = false;
 
         if (!netState.isDisconnected) {
-            // 若期間已被一般封包流程恢復，把剛剛重連檢測暫扣的精華補回，避免重複扣
             const latestEss = parseInt(essenceInput.value) || 0;
             essenceInput.value = latestEss + 1;
             return;
@@ -228,7 +237,6 @@
             return;
         }
 
-        // 未收到新封包：精華回補 1，其餘設定維持不變
         const afterEss = parseInt(essenceInput.value) || 0;
         essenceInput.value = afterEss + 1;
 
@@ -342,7 +350,7 @@
         const mode = document.getElementById('ds-mode-select') ? document.getElementById('ds-mode-select').value : '1';
         const affix1 = document.getElementById('ds-target-affix1') ? document.getElementById('ds-target-affix1').value.trim().toLowerCase() : '';
         const affix2 = document.getElementById('ds-target-affix2') ? document.getElementById('ds-target-affix2').value.trim().toLowerCase() : '';
-        
+
         let c1 = (affix1 && window.__dsLatestForgeT[affix1]) ? window.__dsLatestForgeT[affix1] : 0;
         let c2 = (affix2 && window.__dsLatestForgeT[affix2]) ? window.__dsLatestForgeT[affix2] : 0;
         let totalTries = 0;
@@ -713,7 +721,18 @@
     function simulateClick(x, y) {
         const target = document.elementFromPoint(x, y);
         if (!target) return;
-        const opt = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0, buttons: 1 };
+        const opt = {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: x,
+            clientY: y,
+            button: 0,
+            buttons: 1,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true
+        };
         target.dispatchEvent(new PointerEvent('pointerdown', opt));
         target.dispatchEvent(new MouseEvent('mousedown', opt));
         setTimeout(() => {
@@ -764,12 +783,11 @@
         }
 
         simulateClick(state.temperPos.x, state.temperPos.y); await sleep(300);
-        simulateClick(state.temperPos.x, state.temperPos.y); 
+        simulateClick(state.temperPos.x, state.temperPos.y);
 
         await waitForOutcome('cleaned', 5000);
         await sleep(400);
 
-        // 點擊禁止關閉介面，若仍在介面中則再點一次，上限 5 次
         simulateClick(state.cancelPos.x, state.cancelPos.y); await sleep(1200);
         if (!state.running) return;
 
