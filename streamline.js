@@ -1,6 +1,6 @@
 void (function D2MOD_V2_LITE() {
-if (window.__D2MOD_LOADED) return;
-window.__D2MOD_LOADED = true;
+if (window.__D2MOD_V2_LOADED) return;
+window.__D2MOD_V2_LOADED = true;
 
 const D2ZH_VERSION = 'V2大神精簡版';
 window.__D2ZH_VERSION = D2ZH_VERSION;
@@ -707,6 +707,178 @@ d2edEl('div', { class: 'd2ed-row' }, d2edEl('button', { type: 'button', class: o
 d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
 }
 
+// === 裝備修改（挑身上或物品欄裝備，指定每行強化次數） ===
+const D2GAME = { proto: null, game: null, tries: 0 };
+const D2IE_TEMPER_MAX = 10;
+const D2IE_SLOT = { weapon: '武器', shield: '副手', helm: '頭盔', head: '頭盔', body: '身體護甲', armor: '身體護甲', gloves: '手套', belt: '腰帶', boots: '靴子', amulet: '護身符', ring: '戒指', ring1: '左戒指', ring2: '右戒指', ringLeft: '左戒指', ringRight: '右戒指' };
+const D2IE = { overlay: null, pick: null };
+function d2gameUrls() {
+return [...new Set([...performance.getEntriesByType('resource').map(e => e.name), ...[...document.querySelectorAll('script[src]')].map(e => e.src), ...[...document.querySelectorAll('link[rel=modulepreload]')].map(e => e.href)])].filter(n => /\/assets\/[^/]+\.js(\?|$)/.test(n) && !/\/ko-/.test(n));
+}
+async function d2gameInstall() {
+if (D2GAME.proto) return true;
+const urls = d2gameUrls();
+const first = urls.filter(u => /\/Game-[\w-]+\.js/.test(u));
+for (const url of [...first, ...urls.filter(u => !first.includes(u))]) {
+let m;
+try { m = await Promise.race([import(url), new Promise((_, no) => setTimeout(no, 3000))]); } catch (_) { continue; }
+for (const v of Object.values(m)) {
+const P = v && typeof v === 'function' && v.prototype;
+if (P && typeof P.forgeTry === 'function' && typeof P.tick === 'function' && typeof P.changeGear === 'function') { d2gamePatch(P); return true; }
+}
+if (first.includes(url)) continue;
+}
+if (++D2GAME.tries < 10) setTimeout(d2gameInstall, 3000);
+return false;
+}
+function d2gamePatch(P) {
+if (P.__d2edPatched) { D2GAME.proto = P; return; }
+P.__d2edPatched = true;
+D2GAME.proto = P;
+const rawTick = P.tick;
+P.tick = function () { D2GAME.game = this; return rawTick.apply(this, arguments); };
+const rawTry = P.forgeTry;
+P.forgeTry = async function () { D2GAME.game = this; return rawTry.apply(this, arguments); };
+}
+function d2ieGame() {
+const g = D2GAME.game;
+return g && g.kit && g.save ? g : null;
+}
+function d2ieEntries() {
+const g = d2ieGame();
+if (!g) return [];
+const kit = g.kit.id, save = g.save, out = [];
+const ok = it => it && typeof it === 'object' && typeof it.base === 'string' && it.id && it.type !== 'quest' && it.type !== 'essence' && Array.isArray(it.mods);
+for (const [slot, it] of Object.entries((save.equippedByClass || {})[kit] || {})) if (ok(it)) out.push({ where: '身上・' + (D2IE_SLOT[slot] || slot), item: it });
+const sets = (save.weaponSets || {})[kit];
+if (sets && typeof sets === 'object') for (const [slot, it] of Object.entries(sets)) if (ok(it)) out.push({ where: '副武器組・' + (D2IE_SLOT[slot] || slot), item: it });
+for (const it of (save.inventoryByClass || {})[kit] || []) if (ok(it)) out.push({ where: '物品欄', item: it });
+return out;
+}
+function d2ieLevel() {
+const g = d2ieGame();
+return (D2ED.player && D2ED.player.level) || (g && g.world && g.world.player && g.world.player.level) || 1;
+}
+function d2ieAnvilLines(item) {
+const f = D2EC.api && D2EC.api.anvilLines;
+if (!f) return null;
+try { return f(item, 0, d2ieLevel(), 1).lines || []; } catch (_) { return null; }
+}
+function d2ieTemperCap(item) {
+return item.forge && item.forge.hf ? D2IE_TEMPER_MAX * 2 : D2IE_TEMPER_MAX;
+}
+function d2ieChange(item, fn) {
+const g = d2ieGame();
+if (!g) return false;
+g.changeGear(g.kit.id, () => fn(item));
+return true;
+}
+function d2ieClose() {
+if (!D2IE.overlay) return;
+D2IE.overlay.remove();
+D2IE.overlay = null;
+D2IE.pick = null;
+}
+function d2ieMsg(text, bad) {
+const msg = D2IE.overlay && D2IE.overlay.querySelector('.d2ec-editor .d2ec-msg');
+if (!msg) return;
+msg.textContent = text;
+msg.style.color = bad ? '#ff8a7a' : '';
+clearTimeout(msg._h);
+msg._h = setTimeout(() => { msg.textContent = ''; }, 4000);
+}
+async function d2ieShow() {
+if (D2IE.overlay || D2EC.overlay) return;
+if (!d2ieGame()) { d2edToast('還沒抓到遊戲資料，請進營地或遊戲後再試'); return; }
+const list = d2edEl('div', { class: 'd2ec-results' }, d2edEl('p', { class: 'd2ec-hint' }, '讀取裝備資料中…'));
+const overlay = D2IE.overlay = d2edEl('div', { id: 'd2ec-overlay', role: 'dialog', 'aria-label': '裝備修改' },
+d2edEl('div', { class: 'd2ec-head' }, d2edEl('b', {}, '裝備修改'), d2edEl('span', { class: 'd2ec-grow' }),
+d2edEl('button', { type: 'button', class: 'd2ec-x', 'aria-label': '關閉', onclick: d2ieClose }, '×')),
+d2edEl('div', { class: 'd2ec-main' }, list, d2edEl('div', { class: 'd2ec-editor' }, d2edEl('p', { class: 'd2ec-hint' }, '從左邊選一件裝備。'))));
+for (const type of ['keydown', 'keyup', 'keypress']) overlay.addEventListener(type, e => {
+e.stopPropagation();
+if (type === 'keydown' && e.key === 'Escape') d2ieClose();
+});
+document.body.append(overlay);
+const api = await d2ecLoad();
+if (D2IE.overlay !== overlay) return;
+if (!api) { list.replaceChildren(d2edEl('p', { class: 'd2ec-hint' }, '讀不到遊戲的裝備資料。')); return; }
+d2ieList();
+}
+function d2ieList() {
+const list = D2IE.overlay && D2IE.overlay.querySelector('.d2ec-results');
+if (!list) return;
+const entries = d2ieEntries();
+if (!entries.length) { list.replaceChildren(d2edEl('p', { class: 'd2ec-hint' }, '身上和物品欄沒有可以修改的裝備。')); return; }
+list.replaceChildren(...entries.map(en => {
+const it = en.item;
+const b = d2edEl('button', { type: 'button', class: 'd2ec-result d2ec-r-' + it.rarity, onclick: () => d2ieSelect(it) },
+d2ecIcon(it.rarity, it.name, it.base), d2edEl('span', {}, it.name, d2edEl('small', {}, en.where)));
+b.classList.toggle('on', D2IE.pick === it);
+return b;
+}));
+}
+function d2ieSelect(item) {
+D2IE.pick = item;
+d2ieList();
+const box = D2IE.overlay.querySelector('.d2ec-editor');
+const rarityZh = { normal: '普通', magic: '魔法', rare: '稀有', unique: '獨特', set: '套裝', runeword: '符文之語' }[item.rarity] || item.rarity;
+const head = d2edEl('div', { class: 'd2ec-title d2ec-r-' + item.rarity }, d2ecIcon(item.rarity, item.name, item.base),
+d2edEl('div', {}, d2edEl('b', {}, item.name), d2edEl('small', {}, `${rarityZh}・${item.base}`)));
+box.replaceChildren(head, ...d2ieTemperPart(item), d2edEl('div', { class: 'd2ec-actions' }, d2edEl('span', { class: 'd2ec-msg' })));
+}
+function d2ieTemperPart(item) {
+const out = [d2edEl('h4', {}, '指定強化')];
+const lines = d2ieAnvilLines(item);
+if (!lines) { out.push(d2edEl('p', { class: 'd2ec-fixed' }, '讀不到鐵砧的資料，這個版本無法指定強化。')); return out; }
+const rows = lines.filter(l => l.key);
+if (!rows.length) { out.push(d2edEl('p', { class: 'd2ec-fixed' }, '這件裝備沒有可以強化的能力。')); return out; }
+const held = (item.forge && item.forge.t) || {};
+const cap = d2ieTemperCap(item);
+const reads = [];
+const total = d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' });
+const showTotal = () => {
+const sum = reads.reduce((a, [, read]) => a + read(), 0);
+total.textContent = `合計 ${sum} / ${cap} 次`;
+total.style.color = sum > cap ? '#ff8a7a' : '';
+};
+for (const l of rows) {
+const row = d2ecNumberRow(v => `${l.text}（強化 ${v} 次）`, 0, cap, Math.min(cap, held[l.key] || 0), read => reads.push([l.key, read]));
+row.querySelector('input').addEventListener('input', showTotal);
+out.push(row);
+}
+showTotal();
+out.push(total);
+const apply = clear => {
+const t = {};
+if (!clear) for (const [key, read] of reads) { const n = read(); if (n > 0) t[key] = n; }
+const sum = Object.values(t).reduce((a, b) => a + b, 0);
+if (sum > cap) { d2ieMsg(`強化合計 ${sum} 次，超過上限 ${cap} 次，沒有套用`, true); return; }
+const ok = d2ieChange(item, it => {
+const f = { ...(it.forge || {}) };
+if (Object.keys(t).length) f.t = t; else delete f.t;
+if (Object.keys(f).length) it.forge = f; else delete it.forge;
+});
+if (!ok) { d2ieMsg('找不到遊戲資料，沒有套用', true); return; }
+d2ieSelect(item);
+d2ieMsg(clear ? '已清除所有強化' : '已套用強化');
+};
+out.push(d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, cap > D2IE_TEMPER_MAX ? '數量型能力每強化一次 +20%（至少 +1），技能等級每次 +1 級。這件經過地獄熔爐加倍，上限是 20 次。' : '數量型能力每強化一次 +20%（至少 +1），技能等級每次 +1 級。每件最多 10 次，跟恰西擴鑽一樣。'),
+d2edEl('div', { class: 'd2ed-row', style: 'margin: 6px 0' },
+d2edEl('button', { type: 'button', class: 'd2ec-ok', onclick: () => apply(false) }, '套用強化'),
+d2edEl('button', { type: 'button', onclick: () => apply(true) }, '全部清除')));
+return out;
+}
+function d2edForgeSection() {
+const game = d2ieGame();
+const ready = !!game;
+return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '裝備修改'),
+d2edEl('p', { class: 'd2ed-note' }, '挑身上或物品欄的裝備，直接指定每一行能力的強化次數（跟恰西擴鑽一樣，每件最多 10 次）。'),
+d2edEl('div', { class: 'd2ed-row' },
+d2edEl('button', { type: 'button', class: 'd2ed-main', ...(!ready && { disabled: '' }), onclick: d2ieShow }, '裝備修改'),
+ready ? null : d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, '選好英雄（進營地或遊戲中）後才能使用')));
+}
+
 const D2EC = { api: null, overlay: null, sel: null, cat: 'head', failed: false };
 const D2EC_GRID = { columns: 10, rows: 4 };
 const D2EC_FIXED_FUNCS = new Set([15, 16, 11, 19]);
@@ -762,6 +934,7 @@ runewordStats: find((s, f) => f.length === 4 && /\.runewords\?\.\[/.test(s) && /
 size: find(s => /\.size\?\?\[1,1\]/.test(s)),
 baseInfo: find(s => /itype:\w+\.itype/.test(s) && s.includes('bothHands')),
 isType: find((s, f) => f.length === 2 && s.includes('.equiv')),
+anvilLines: find(s => s.includes('hellforge:{open:')),
 makers: fns.filter(([f, s]) => f.length === 3 && /\.roll=\[\d,/.test(s)).map(([f]) => f),
 cats: exportsAll.find(v => Array.isArray(v) && v[0] && Array.isArray(v[0].uniques) && v[0].label),
 make: {},
@@ -1185,7 +1358,7 @@ D2EC.overlay = null;
 D2EC.sel = null;
 }
 async function d2ecShow() {
-if (D2EC.overlay) return;
+if (D2EC.overlay || D2IE.overlay) return;
 const search = d2edEl('input', { type: 'search', class: 'd2ec-search', placeholder: '搜尋裝備，例如：Enigma', autocomplete: 'off', spellcheck: 'false', 'aria-label': '搜尋裝備' });
 const results = d2edEl('div', { class: 'd2ec-results' }, d2edEl('p', { class: 'd2ec-hint' }, '讀取裝備資料中…'));
 const overlay = D2EC.overlay = d2edEl('div', { id: 'd2ec-overlay', role: 'dialog', 'aria-label': '裝備創造' },
@@ -1227,8 +1400,8 @@ function d2edRender() {
 const body = D2ED.panel.querySelector('.d2ed-body');
 const inRun = !document.body.classList.contains('no-run');
 const sections = d2edUnlocked()
-? [inRun ? d2edRunSection() : d2edSaveSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edSkillZoomSection()]
-: [d2edLockSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edSkillZoomSection()];
+? [inRun ? d2edRunSection() : d2edSaveSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edSkillZoomSection()]
+: [d2edLockSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edSkillZoomSection()];
 body.replaceChildren(...sections);
 }
 
@@ -1249,7 +1422,7 @@ function d2edPlaceButton() {
 const b = D2ED.button;
 const pb = D2ED.pullBtn;
 if (!b) return;
-const hidden = !!D2ED.panel || !!D2EC.overlay;
+const hidden = !!D2ED.panel || !!D2EC.overlay || !!D2IE.overlay;
 b.style.display = hidden ? 'none' : 'block';
 if (pb) pb.style.display = hidden ? 'none' : 'block';
 if (!hidden) {
@@ -1269,6 +1442,8 @@ function d2edInstall() {
 window.__D2ED = D2ED;
 d2edBuildInstall();
 d2ecWorldInstall();
+d2gameInstall();
+D2ED.forge = { game: D2GAME, show: d2ieShow, entries: d2ieEntries, select: d2ieSelect, lines: d2ieAnvilLines };
 d2edKeepLeaderboardOff();
 d2edPerfApplyDpr();
 setTimeout(d2edPerfApplyGame, 1500);
