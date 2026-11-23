@@ -1,8 +1,8 @@
-void (function D2MOD_V2_LITE() {
-if (window.__D2MOD_V2_LOADED) return;
-window.__D2MOD_V2_LOADED = true;
+void (function D2MOD_V3_LITE() {
+if (window.__D2MOD_V3_LOADED) return;
+window.__D2MOD_V3_LOADED = true;
 
-const D2ZH_VERSION = 'V2大神精簡版';
+const D2ZH_VERSION = 'V3大神精簡版';
 window.__D2ZH_VERSION = D2ZH_VERSION;
 const UI_FONT = '"Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", sans-serif';
 const D2ED = {
@@ -378,7 +378,7 @@ return box;
 function d2edSaveSection() {
 const box = d2edEl('section', { class: 'd2ed-sec' }, d2edEditTitle('永久升級（存檔）'));
 if (!document.body.classList.contains('no-run')) {
-box.append(d2edEl('p', { class: 'd2ed-note' }, '遊戲中不能改存檔。請「儲存並離開遊戲」，在主選單的書籤修改修改。'));
+box.append(d2edEl('p', { class: 'd2ed-note' }, '遊戲中不能改存檔。請「儲存並離開遊戲」，在主選單的大神系統修改。'));
 return box;
 }
 const save = d2edReadSave();
@@ -651,23 +651,29 @@ d2edEl('div', { class: 'd2ed-row' }, d2edEl('button', { type: 'button', class: o
 d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
 }
 
-// === 直接將地上道具拉到角色腳邊（含一鍵吸取與自動吸取開關） ===
+// === 吞天：將地上道具與未開啟寶箱拉到角色腳邊（含自動吸取開關） ===
 const D2ED_ENDPULL_KEY = 'd2ed:endPull';
 function d2edEndPullOn() {
 try { return localStorage.getItem(D2ED_ENDPULL_KEY) !== '0'; } catch (_) { return true; }
 }
 function d2edPullItemsToPlayer() {
-const w = D2ED.world;
-if (!w?.pickups || !w?.player) return 0;
-let n = 0;
+const w = D2ED.world || window.__foundWorld;
+if (!w?.pickups || !w?.player) return { items: 0, chests: 0, total: 0 };
+let items = 0;
+let chests = 0;
 for (const p of w.pickups) {
-if (p && p.kind === 'item') {
+if (!p || p.dead) continue;
+if (p.kind === 'item') {
 p.x = w.player.x + (Math.random() - 0.5) * 16;
 p.y = w.player.y + (Math.random() - 0.5) * 16;
-n++;
+items++;
+} else if (p.kind === 'chest') {
+p.x = w.player.x + (Math.random() - 0.5) * 20;
+p.y = w.player.y + (Math.random() - 0.5) * 20;
+chests++;
 }
 }
-return n;
+return { items, chests, total: items + chests };
 }
 setInterval(() => {
 if (d2edEndPullOn() && d2edInRun()) d2edPullItemsToPlayer();
@@ -677,17 +683,18 @@ function d2edEndPullSection() {
 const on = d2edEndPullOn();
 const toggle = () => {
 try { localStorage.setItem(D2ED_ENDPULL_KEY, on ? '0' : '1'); } catch (e) { alert('無法儲存設定：' + e); return; }
-d2edRender(); d2edToast(on ? '自動吸取地上道具已關閉' : '自動吸取地上道具已開啟');
+if (typeof d2edSyncPullLabel === 'function') d2edSyncPullLabel();
+d2edRender(); d2edToast(on ? '自動吞天已關閉' : '自動吞天已開啟');
 };
 const pullNow = () => {
-const n = d2edPullItemsToPlayer();
-d2edToast(n ? `已將 ${n} 件道具吸到腳邊` : '目前地上沒有可吸取的道具');
+const res = d2edPullItemsToPlayer();
+d2edToast(res.total ? `已吞天 ${res.items} 物 / ${res.chests} 箱` : '目前沒有可吞天的道具或寶箱');
 };
-return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '自動吸取地上道具'),
-d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上掉落的裝備與物品拉到角色腳邊（也可直接按右上角「一鍵吸物」手動觸發）。'),
+return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '吞天（自動吸物與寶箱）'),
+d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未開啟寶箱拉到腳邊（也可直接點「吞天」按鈕手動吸取，右鍵「吞天」可切換自動）。'),
 d2edEl('div', { class: 'd2ed-row' },
-d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動吸取' : '開啟自動吸取'),
-d2edEl('button', { type: 'button', onclick: pullNow }, '立即吸到腳邊'),
+d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動吞天' : '開啟自動吞天'),
+d2edEl('button', { type: 'button', onclick: pullNow }, '立即吞天'),
 d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
 }
 
@@ -1409,13 +1416,219 @@ function d2edOpen() {
 if (D2ED.panel) return;
 const close = () => { D2ED.panel.remove(); D2ED.panel = null; };
 D2ED.panel = d2edEl('div', { id: 'd2ed-overlay', onclick: e => { if (e.target.id === 'd2ed-overlay') close(); } },
-d2edEl('div', { class: 'd2ed-card', role: 'dialog', 'aria-label': '書籤修改' },
-d2edEl('div', { class: 'd2ed-head' }, d2edEl('b', {}, '書籤修改'), d2edEl('span', { class: 'd2ed-ver', title: '版本' }, D2ZH_VERSION), d2edEl('span', { class: 'd2ed-msg' }),
+d2edEl('div', { class: 'd2ed-card', role: 'dialog', 'aria-label': '大神系統' },
+d2edEl('div', { class: 'd2ed-head' }, d2edEl('b', {}, '大神系統'), d2edEl('span', { class: 'd2ed-ver', title: '版本' }, D2ZH_VERSION), d2edEl('span', { class: 'd2ed-msg' }),
 d2edEl('button', { type: 'button', class: 'd2ed-x', onclick: close, 'aria-label': '關閉' }, '×')),
 d2edEl('div', { class: 'd2ed-body' })));
 D2ED.panel.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') close(); });
 document.body.append(D2ED.panel);
 d2edRender();
+}
+
+// === 可拖動浮動按鈕（縮小約 30%，禁止與吞天按鈕重疊） ===
+const D2ED_SYS_POS_KEY = 'd2ed:大神系統Pos';
+const D2ED_PULL_POS_KEY = 'd2ed:吞天Pos';
+const BTN_GAP = 6;
+let pullTempText = '';
+let pullTempTimer = null;
+
+function d2edSyncPullLabel() {
+const pb = D2ED.pullBtn;
+if (!pb) return;
+if (pullTempText) {
+pb.textContent = pullTempText;
+return;
+}
+pb.textContent = `吞天 (自動:${d2edEndPullOn() ? '開' : '關'})`;
+}
+
+function readSavedPos(key) {
+try {
+const raw = localStorage.getItem(key);
+if (!raw) return null;
+const pos = JSON.parse(raw);
+if (typeof pos?.left === 'number' && typeof pos?.top === 'number') return { left: pos.left, top: pos.top };
+} catch (_) {}
+return null;
+}
+
+function writeSavedPos(key, el) {
+if (!el) return;
+const rect = el.getBoundingClientRect();
+try {
+localStorage.setItem(key, JSON.stringify({ left: rect.left, top: rect.top }));
+} catch (_) {}
+}
+
+function rectsOverlap(a, b, pad = BTN_GAP) {
+return !(
+a.left + a.width + pad <= b.left ||
+b.left + b.width + pad <= a.left ||
+a.top + a.height + pad <= b.top ||
+b.top + b.height + pad <= a.top
+);
+}
+
+function clampBox(left, top, width, height) {
+const maxLeft = Math.max(0, window.innerWidth - width);
+const maxTop = Math.max(0, window.innerHeight - height);
+return {
+left: Math.min(maxLeft, Math.max(0, left)),
+top: Math.min(maxTop, Math.max(0, top)),
+width,
+height
+};
+}
+
+function resolveNonOverlap(movedEl, otherEl) {
+if (!movedEl || !otherEl) return;
+const mRect = movedEl.getBoundingClientRect();
+const oRect = otherEl.getBoundingClientRect();
+if (!mRect.width || !mRect.height || !oRect.width || !oRect.height) return;
+let box = clampBox(mRect.left, mRect.top, mRect.width, mRect.height);
+if (!rectsOverlap(box, oRect, BTN_GAP)) {
+movedEl.style.left = `${box.left}px`;
+movedEl.style.top = `${box.top}px`;
+movedEl.style.right = 'auto';
+return;
+}
+const candidates = [
+{ left: oRect.left - box.width - BTN_GAP, top: box.top },
+{ left: oRect.right + BTN_GAP, top: box.top },
+{ left: box.left, top: oRect.bottom + BTN_GAP },
+{ left: box.left, top: oRect.top - box.height - BTN_GAP }
+];
+let best = null;
+let bestDist = Infinity;
+for (const c of candidates) {
+const clamped = clampBox(c.left, c.top, box.width, box.height);
+if (!rectsOverlap(clamped, oRect, BTN_GAP)) {
+const dist = Math.hypot(clamped.left - box.left, clamped.top - box.top);
+if (dist < bestDist) {
+bestDist = dist;
+best = clamped;
+}
+}
+}
+if (!best) {
+best = clampBox(oRect.left - box.width - BTN_GAP, box.top, box.width, box.height);
+}
+movedEl.style.left = `${best.left}px`;
+movedEl.style.top = `${best.top}px`;
+movedEl.style.right = 'auto';
+}
+
+function initDefaultPositions() {
+const b = D2ED.button;
+const pb = D2ED.pullBtn;
+if (!b || !pb) return;
+const bRect = b.getBoundingClientRect();
+const pbRect = pb.getBoundingClientRect();
+const bw = bRect.width || 68;
+const bh = bRect.height || 24;
+const pw = pbRect.width || 88;
+const ph = pbRect.height || 24;
+
+const savedB = readSavedPos(D2ED_SYS_POS_KEY);
+const savedP = readSavedPos(D2ED_PULL_POS_KEY);
+
+const defB = clampBox(window.innerWidth - bw - 12, 12, bw, bh);
+const posB = savedB ? clampBox(savedB.left, savedB.top, bw, bh) : defB;
+b.style.left = `${posB.left}px`;
+b.style.top = `${posB.top}px`;
+b.style.right = 'auto';
+
+const defP = clampBox(posB.left - pw - BTN_GAP, posB.top, pw, ph);
+const posP = savedP ? clampBox(savedP.left, savedP.top, pw, ph) : defP;
+pb.style.left = `${posP.left}px`;
+pb.style.top = `${posP.top}px`;
+pb.style.right = 'auto';
+
+if (rectsOverlap(posP, posB, BTN_GAP)) {
+resolveNonOverlap(pb, b);
+}
+}
+
+function attachDraggable(el, posKey, otherGetter, onTap) {
+let dragState = null;
+let suppressTap = false;
+
+el.addEventListener('pointerdown', (e) => {
+if (e.button === 2) return;
+e.preventDefault();
+e.stopPropagation();
+const rect = el.getBoundingClientRect();
+el.style.left = `${rect.left}px`;
+el.style.top = `${rect.top}px`;
+el.style.right = 'auto';
+el.style.cursor = 'grabbing';
+dragState = {
+pointerId: e.pointerId,
+startX: e.clientX,
+startY: e.clientY,
+originLeft: rect.left,
+originTop: rect.top,
+width: rect.width,
+height: rect.height,
+moved: false
+};
+try { el.setPointerCapture(e.pointerId); } catch (_) {}
+}, true);
+
+el.addEventListener('pointermove', (e) => {
+if (!dragState || e.pointerId !== dragState.pointerId) return;
+e.preventDefault();
+e.stopPropagation();
+const dx = e.clientX - dragState.startX;
+const dy = e.clientY - dragState.startY;
+if (!dragState.moved && Math.hypot(dx, dy) > 4) {
+dragState.moved = true;
+}
+if (dragState.moved) {
+let box = clampBox(dragState.originLeft + dx, dragState.originTop + dy, dragState.width, dragState.height);
+const other = otherGetter();
+if (other) {
+const oRect = other.getBoundingClientRect();
+if (rectsOverlap(box, oRect, BTN_GAP)) {
+const prevLeft = parseFloat(el.style.left) || box.left;
+const prevTop = parseFloat(el.style.top) || box.top;
+const tryX = clampBox(box.left, prevTop, dragState.width, dragState.height);
+const tryY = clampBox(prevLeft, box.top, dragState.width, dragState.height);
+if (!rectsOverlap(tryX, oRect, BTN_GAP)) box = tryX;
+else if (!rectsOverlap(tryY, oRect, BTN_GAP)) box = tryY;
+else box = clampBox(prevLeft, prevTop, dragState.width, dragState.height);
+}
+}
+el.style.left = `${box.left}px`;
+el.style.top = `${box.top}px`;
+el.style.right = 'auto';
+}
+}, true);
+
+const finishDrag = (e) => {
+if (!dragState || e.pointerId !== dragState.pointerId) return;
+e.preventDefault();
+e.stopPropagation();
+el.style.cursor = 'grab';
+if (dragState.moved) {
+suppressTap = true;
+resolveNonOverlap(el, otherGetter());
+writeSavedPos(posKey, el);
+setTimeout(() => { suppressTap = false; }, 60);
+}
+try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+dragState = null;
+};
+
+el.addEventListener('pointerup', finishDrag, true);
+el.addEventListener('pointercancel', finishDrag, true);
+
+el.addEventListener('click', (e) => {
+e.preventDefault();
+e.stopPropagation();
+if (suppressTap) return;
+onTap(e);
+});
 }
 
 function d2edPlaceButton() {
@@ -1425,14 +1638,11 @@ if (!b) return;
 const hidden = !!D2ED.panel || !!D2EC.overlay || !!D2IE.overlay;
 b.style.display = hidden ? 'none' : 'block';
 if (pb) pb.style.display = hidden ? 'none' : 'block';
-if (!hidden) {
-b.style.top = '12px';
-b.style.right = '12px';
-b.style.left = 'auto';
-if (pb) {
-pb.style.top = '12px';
-pb.style.right = '132px';
-pb.style.left = 'auto';
+if (!hidden && pb) {
+const bRect = b.getBoundingClientRect();
+const pRect = pb.getBoundingClientRect();
+if (bRect.width && pRect.width && rectsOverlap(bRect, pRect, BTN_GAP)) {
+resolveNonOverlap(pb, b);
 }
 }
 requestAnimationFrame(d2edPlaceButton);
@@ -1464,10 +1674,11 @@ return v;
 
 const style = document.createElement('style');
 style.textContent = `
-.d2ed-top-btn { position: fixed; top: 12px; z-index: 2147483646; display: block; min-width: 112px; height: 34px; padding: 0 12px;
-background: linear-gradient(180deg, #3a2e1c, #1a140c); border: 1px solid #8f743e; border-radius: 6px;
+.d2ed-top-btn { position: fixed; top: 12px; z-index: 2147483646; display: block; height: 24px; padding: 0 8px;
+background: linear-gradient(180deg, #3a2e1c, #1a140c); border: 1px solid #8f743e; border-radius: 4px;
 color: #e8dcc0; text-shadow: 1px 1px 0 #000, -1px 0 #000, 0 -1px #000, 0 0 3px #000;
-box-shadow: 0 4px 12px rgba(0, 0, 0, .55); cursor: pointer; font: bold 15px ${UI_FONT}; letter-spacing: 1px; white-space: nowrap; }
+box-shadow: 0 3px 8px rgba(0, 0, 0, .55); cursor: grab; font: bold 10px ${UI_FONT}; letter-spacing: 0.5px; white-space: nowrap;
+touch-action: none; user-select: none; -webkit-user-select: none; }
 .d2ed-top-btn:hover { color: #fff; border-color: #f0c94a; }
 #d2ed-overlay { position: fixed; inset: 0; z-index: 2147483647; display: grid; grid-template-rows: minmax(0, 1fr); place-items: center; padding: 12px;
 background: rgba(0,0,0,.6); font: 14px/1.5 ${UI_FONT}; color: #e8e2d0; }
@@ -1475,6 +1686,7 @@ background: rgba(0,0,0,.6); font: 14px/1.5 ${UI_FONT}; color: #e8e2d0; }
 background: linear-gradient(180deg, #221a12, #120d08); border: 2px solid #8f743e; border-radius: 8px; box-shadow: 0 10px 40px #000; }
 #d2ed-overlay .d2ed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px; border-bottom: 1px solid #4a3418; }
 #d2ed-overlay .d2ed-head b { color: #f0c94a; font-size: 18px; white-space: nowrap; }
+#d2ed-overlay .d2ed-head button { white-space: nowrap; }
 #d2ed-overlay .d2ed-ver { padding: 0 6px; border: 1px solid #8f743e; border-radius: 4px; color: #c7a45f; font-size: 12px; line-height: 18px; }
 #d2ed-overlay .d2ed-msg { flex: 1; color: #9fd38a; font-size: 13px; }
 #d2ed-overlay .d2ed-x { background: none; border: 0; color: #d8d0c0; font-size: 24px; line-height: 1; cursor: pointer; }
@@ -1567,24 +1779,52 @@ background-image: linear-gradient(#2e2216 1px, transparent 1px), linear-gradient
 @media (max-width: 620px) { #d2ec-overlay .d2ec-main { grid-template-columns: 1fr; grid-template-rows: minmax(70px, 2fr) 5fr; } #d2ec-overlay .d2ec-results { border-right: 0; border-bottom: 1px solid #4a3418; } }
 `;
 document.head.append(style);
-D2ED.button = d2edEl('button', { id: 'd2ed-btn', class: 'd2ed-top-btn', type: 'button', onclick: e => { e.preventDefault(); e.stopPropagation(); d2edOpen(); } }, '書籤修改');
-D2ED.pullBtn = d2edEl('button', { id: 'd2ed-pull-btn', class: 'd2ed-top-btn', type: 'button', onclick: e => {
-e.preventDefault(); e.stopPropagation();
-const n = d2edPullItemsToPlayer();
-const orig = D2ED.pullBtn.textContent;
-D2ED.pullBtn.textContent = n ? `已吸 ${n} 件` : '無道具';
-setTimeout(() => { if (D2ED.pullBtn) D2ED.pullBtn.textContent = orig; }, 1000);
-} }, '一鍵吸物');
+
+D2ED.button = d2edEl('button', { id: 'd2ed-btn', class: 'd2ed-top-btn', type: 'button' }, '大神系統');
+D2ED.pullBtn = d2edEl('button', { id: 'd2ed-pull-btn', class: 'd2ed-top-btn', type: 'button' }, '吞天');
+d2edSyncPullLabel();
 document.body.append(D2ED.button, D2ED.pullBtn);
-for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'touchstart', 'touchend']) {
+
+attachDraggable(D2ED.button, D2ED_SYS_POS_KEY, () => D2ED.pullBtn, () => {
+d2edOpen();
+});
+
+attachDraggable(D2ED.pullBtn, D2ED_PULL_POS_KEY, () => D2ED.button, () => {
+const res = d2edPullItemsToPlayer();
+pullTempText = res.total ? `吞天 ${res.items}物/${res.chests}箱` : '吞天 (無)';
+d2edSyncPullLabel();
+clearTimeout(pullTempTimer);
+pullTempTimer = setTimeout(() => {
+pullTempText = '';
+d2edSyncPullLabel();
+}, 1000);
+});
+
+D2ED.pullBtn.addEventListener('contextmenu', (e) => {
+e.preventDefault();
+e.stopPropagation();
+const next = !d2edEndPullOn();
+try { localStorage.setItem(D2ED_ENDPULL_KEY, next ? '1' : '0'); } catch (_) {}
+pullTempText = '';
+d2edSyncPullLabel();
+if (D2ED.panel) d2edRender();
+});
+
+for (const type of ['mousedown', 'mouseup', 'touchstart', 'touchend']) {
 window.addEventListener(type, e => {
 if (e.target instanceof Element && (e.target.closest('.d2ed-top-btn') || e.target.closest('#d2ed-overlay') || e.target.closest('#d2ec-overlay'))) {
-if (type === 'click') return;
 e.stopImmediatePropagation();
 }
 }, true);
 }
-requestAnimationFrame(d2edPlaceButton);
+
+requestAnimationFrame(() => {
+initDefaultPositions();
+d2edPlaceButton();
+});
+window.addEventListener('resize', () => {
+initDefaultPositions();
+});
 }
 
 d2edInstall();
