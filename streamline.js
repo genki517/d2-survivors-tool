@@ -1,14 +1,14 @@
-void (function D2MOD_V3_LITE() {
-if (window.__D2MOD_V3_LOADED) return;
-window.__D2MOD_V3_LOADED = true;
+void (function D2MOD_V4_LITE() {
+if (window.__D2MOD_V4_LOADED) return;
+window.__D2MOD_V4_LOADED = true;
 
-const D2ZH_VERSION = 'V3大神精簡版';
+const D2ZH_VERSION = 'V4大神精簡版';
 window.__D2ZH_VERSION = D2ZH_VERSION;
 const UI_FONT = '"Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", sans-serif';
 const D2ED = {
 player: null, extras: null, world: null, build: null,
 added: new WeakMap(), changed: new WeakMap(), kept: new WeakSet(),
-button: null, pullBtn: null, panel: null, presetName: ''
+button: null, pullBtn: null, shinraBtn: null, panel: null, presetName: ''
 };
 const D2ED_SAVE_KEY = 'd2-survivors/save/v1';
 const D2ED_ELEMENTS = ['fire', 'cold', 'lightning', 'poison', 'magic'];
@@ -695,6 +695,51 @@ d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未�
 d2edEl('div', { class: 'd2ed-row' },
 d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動吞天' : '開啟自動吞天'),
 d2edEl('button', { type: 'button', onclick: pullNow }, '立即吞天'),
+d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
+}
+
+// === 神羅天征：將存活怪物集中吸到離角色固定距離（預設 200）的同一座標點 ===
+const D2ED_SHINRA_AUTO_KEY = 'd2ed:神羅天征Auto';
+const D2ED_SHINRA_DIST = 200;
+const D2ED_SHINRA_ANGLE = 0;
+function d2edShinraAutoOn() {
+try { return localStorage.getItem(D2ED_SHINRA_AUTO_KEY) === '1'; } catch (_) { return false; }
+}
+function d2edPullEnemiesToFixedPoint(dist = D2ED_SHINRA_DIST, angle = D2ED_SHINRA_ANGLE) {
+const w = D2ED.world || window.__foundWorld;
+if (!w?.enemies || !w?.player) return { pulled: 0, ready: false };
+const targetX = w.player.x + Math.cos(angle) * dist;
+const targetY = w.player.y + Math.sin(angle) * dist;
+let pulled = 0;
+for (const e of w.enemies) {
+if (!e || typeof e.x !== 'number' || typeof e.y !== 'number') continue;
+if (e.dead || (typeof e.hp === 'number' && e.hp <= 0)) continue;
+e.x = targetX;
+e.y = targetY;
+pulled++;
+}
+return { pulled, ready: true, targetX, targetY };
+}
+setInterval(() => {
+if (d2edShinraAutoOn() && d2edInRun()) d2edPullEnemiesToFixedPoint(D2ED_SHINRA_DIST, D2ED_SHINRA_ANGLE);
+}, 1000);
+
+function d2edShinraSection() {
+const on = d2edShinraAutoOn();
+const toggle = () => {
+try { localStorage.setItem(D2ED_SHINRA_AUTO_KEY, on ? '0' : '1'); } catch (e) { alert('無法儲存設定：' + e); return; }
+if (typeof d2edSyncShinraLabel === 'function') d2edSyncShinraLabel();
+d2edRender(); d2edToast(on ? '自動神羅天征已關閉' : '自動神羅天征已開啟');
+};
+const pullNow = () => {
+const res = d2edPullEnemiesToFixedPoint(D2ED_SHINRA_DIST, D2ED_SHINRA_ANGLE);
+d2edToast(!res.ready ? '尚未抓到怪物或角色資料' : res.pulled ? `神羅天征已拉取 ${res.pulled} 隻怪（距離 ${D2ED_SHINRA_DIST}）` : '目前沒有可吸取的怪物');
+};
+return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '神羅天征（固定點吸怪）'),
+d2edEl('p', { class: 'd2ed-note' }, `將存活怪物集中吸到離角色距離 ${D2ED_SHINRA_DIST} 的同一固定點（左鍵「神羅天征」立即吸怪，右鍵切換自動；預設關閉避免被圍毆）。`),
+d2edEl('div', { class: 'd2ed-row' },
+d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動神羅天征' : '開啟自動神羅天征'),
+d2edEl('button', { type: 'button', onclick: pullNow }, '立即神羅天征'),
 d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
 }
 
@@ -1407,8 +1452,8 @@ function d2edRender() {
 const body = D2ED.panel.querySelector('.d2ed-body');
 const inRun = !document.body.classList.contains('no-run');
 const sections = d2edUnlocked()
-? [inRun ? d2edRunSection() : d2edSaveSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edSkillZoomSection()]
-: [d2edLockSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edSkillZoomSection()];
+? [inRun ? d2edRunSection() : d2edSaveSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edShinraSection(), d2edSkillZoomSection()]
+: [d2edLockSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edShinraSection(), d2edSkillZoomSection()];
 body.replaceChildren(...sections);
 }
 
@@ -1425,12 +1470,15 @@ document.body.append(D2ED.panel);
 d2edRender();
 }
 
-// === 可拖動浮動按鈕（縮小約 30%，禁止與吞天按鈕重疊） ===
+// === 可拖動浮動按鈕（縮小約 30%，禁止互相重疊） ===
 const D2ED_SYS_POS_KEY = 'd2ed:大神系統Pos';
 const D2ED_PULL_POS_KEY = 'd2ed:吞天Pos';
+const D2ED_SHINRA_POS_KEY = 'd2ed:神羅天征Pos';
 const BTN_GAP = 6;
 let pullTempText = '';
 let pullTempTimer = null;
+let shinraTempText = '';
+let shinraTempTimer = null;
 
 function d2edSyncPullLabel() {
 const pb = D2ED.pullBtn;
@@ -1440,6 +1488,16 @@ pb.textContent = pullTempText;
 return;
 }
 pb.textContent = `吞天 (自動:${d2edEndPullOn() ? '開' : '關'})`;
+}
+
+function d2edSyncShinraLabel() {
+const sb = D2ED.shinraBtn;
+if (!sb) return;
+if (shinraTempText) {
+sb.textContent = shinraTempText;
+return;
+}
+sb.textContent = `神羅天征 (自動:${d2edShinraAutoOn() ? '開' : '關'})`;
 }
 
 function readSavedPos(key) {
@@ -1480,29 +1538,41 @@ height
 };
 }
 
-function resolveNonOverlap(movedEl, otherEl) {
-if (!movedEl || !otherEl) return;
+function overlapsAny(box, others, pad = BTN_GAP) {
+return others.some(o => o && o.width > 0 && o.height > 0 && rectsOverlap(box, o, pad));
+}
+
+function resolveNonOverlap(movedEl, otherEls) {
+if (!movedEl) return;
+const others = (Array.isArray(otherEls) ? otherEls : [otherEls])
+.filter(el => el && el !== movedEl)
+.map(el => el.getBoundingClientRect())
+.filter(r => r.width > 0 && r.height > 0);
 const mRect = movedEl.getBoundingClientRect();
-const oRect = otherEl.getBoundingClientRect();
-if (!mRect.width || !mRect.height || !oRect.width || !oRect.height) return;
+if (!mRect.width || !mRect.height) return;
 let box = clampBox(mRect.left, mRect.top, mRect.width, mRect.height);
-if (!rectsOverlap(box, oRect, BTN_GAP)) {
+if (!overlapsAny(box, others, BTN_GAP)) {
 movedEl.style.left = `${box.left}px`;
 movedEl.style.top = `${box.top}px`;
 movedEl.style.right = 'auto';
 return;
 }
-const candidates = [
+const candidates = [];
+for (const oRect of others) {
+candidates.push(
 { left: oRect.left - box.width - BTN_GAP, top: box.top },
 { left: oRect.right + BTN_GAP, top: box.top },
 { left: box.left, top: oRect.bottom + BTN_GAP },
-{ left: box.left, top: oRect.top - box.height - BTN_GAP }
-];
+{ left: box.left, top: oRect.top - box.height - BTN_GAP },
+{ left: oRect.left - box.width - BTN_GAP, top: oRect.top },
+{ left: oRect.right + BTN_GAP, top: oRect.top }
+);
+}
 let best = null;
 let bestDist = Infinity;
 for (const c of candidates) {
 const clamped = clampBox(c.left, c.top, box.width, box.height);
-if (!rectsOverlap(clamped, oRect, BTN_GAP)) {
+if (!overlapsAny(clamped, others, BTN_GAP)) {
 const dist = Math.hypot(clamped.left - box.left, clamped.top - box.top);
 if (dist < bestDist) {
 bestDist = dist;
@@ -1511,8 +1581,20 @@ best = clamped;
 }
 }
 if (!best) {
-best = clampBox(oRect.left - box.width - BTN_GAP, box.top, box.width, box.height);
+for (let y = 0; y <= Math.max(0, window.innerHeight - box.height); y += 12) {
+for (let x = 0; x <= Math.max(0, window.innerWidth - box.width); x += 12) {
+const clamped = clampBox(x, y, box.width, box.height);
+if (!overlapsAny(clamped, others, BTN_GAP)) {
+const dist = Math.hypot(clamped.left - box.left, clamped.top - box.top);
+if (dist < bestDist) {
+bestDist = dist;
+best = clamped;
 }
+}
+}
+}
+}
+if (!best) best = box;
 movedEl.style.left = `${best.left}px`;
 movedEl.style.top = `${best.top}px`;
 movedEl.style.right = 'auto';
@@ -1521,16 +1603,18 @@ movedEl.style.right = 'auto';
 function initDefaultPositions() {
 const b = D2ED.button;
 const pb = D2ED.pullBtn;
-if (!b || !pb) return;
-const bRect = b.getBoundingClientRect();
-const pbRect = pb.getBoundingClientRect();
-const bw = bRect.width || 68;
-const bh = bRect.height || 24;
-const pw = pbRect.width || 88;
-const ph = pbRect.height || 24;
+const sb = D2ED.shinraBtn;
+if (!b || !pb || !sb) return;
+const bw = b.getBoundingClientRect().width || 68;
+const bh = b.getBoundingClientRect().height || 24;
+const pw = pb.getBoundingClientRect().width || 88;
+const ph = pb.getBoundingClientRect().height || 24;
+const sw = sb.getBoundingClientRect().width || 96;
+const sh = sb.getBoundingClientRect().height || 24;
 
 const savedB = readSavedPos(D2ED_SYS_POS_KEY);
 const savedP = readSavedPos(D2ED_PULL_POS_KEY);
+const savedS = readSavedPos(D2ED_SHINRA_POS_KEY);
 
 const defB = clampBox(window.innerWidth - bw - 12, 12, bw, bh);
 const posB = savedB ? clampBox(savedB.left, savedB.top, bw, bh) : defB;
@@ -1543,13 +1627,22 @@ const posP = savedP ? clampBox(savedP.left, savedP.top, pw, ph) : defP;
 pb.style.left = `${posP.left}px`;
 pb.style.top = `${posP.top}px`;
 pb.style.right = 'auto';
+if (overlapsAny(posP, [posB], BTN_GAP)) {
+resolveNonOverlap(pb, [b]);
+}
 
-if (rectsOverlap(posP, posB, BTN_GAP)) {
-resolveNonOverlap(pb, b);
+const pRectNow = pb.getBoundingClientRect();
+const defS = clampBox(pRectNow.left - sw - BTN_GAP, pRectNow.top, sw, sh);
+const posS = savedS ? clampBox(savedS.left, savedS.top, sw, sh) : defS;
+sb.style.left = `${posS.left}px`;
+sb.style.top = `${posS.top}px`;
+sb.style.right = 'auto';
+if (overlapsAny(posS, [b.getBoundingClientRect(), pb.getBoundingClientRect()], BTN_GAP)) {
+resolveNonOverlap(sb, [b, pb]);
 }
 }
 
-function attachDraggable(el, posKey, otherGetter, onTap) {
+function attachDraggable(el, posKey, othersGetter, onTap) {
 let dragState = null;
 let suppressTap = false;
 
@@ -1586,18 +1679,18 @@ dragState.moved = true;
 }
 if (dragState.moved) {
 let box = clampBox(dragState.originLeft + dx, dragState.originTop + dy, dragState.width, dragState.height);
-const other = otherGetter();
-if (other) {
-const oRect = other.getBoundingClientRect();
-if (rectsOverlap(box, oRect, BTN_GAP)) {
+const others = (othersGetter() || [])
+.filter(o => o && o !== el)
+.map(o => o.getBoundingClientRect())
+.filter(r => r.width > 0 && r.height > 0);
+if (overlapsAny(box, others, BTN_GAP)) {
 const prevLeft = parseFloat(el.style.left) || box.left;
 const prevTop = parseFloat(el.style.top) || box.top;
 const tryX = clampBox(box.left, prevTop, dragState.width, dragState.height);
 const tryY = clampBox(prevLeft, box.top, dragState.width, dragState.height);
-if (!rectsOverlap(tryX, oRect, BTN_GAP)) box = tryX;
-else if (!rectsOverlap(tryY, oRect, BTN_GAP)) box = tryY;
+if (!overlapsAny(tryX, others, BTN_GAP)) box = tryX;
+else if (!overlapsAny(tryY, others, BTN_GAP)) box = tryY;
 else box = clampBox(prevLeft, prevTop, dragState.width, dragState.height);
-}
 }
 el.style.left = `${box.left}px`;
 el.style.top = `${box.top}px`;
@@ -1612,7 +1705,7 @@ e.stopPropagation();
 el.style.cursor = 'grab';
 if (dragState.moved) {
 suppressTap = true;
-resolveNonOverlap(el, otherGetter());
+resolveNonOverlap(el, othersGetter());
 writeSavedPos(posKey, el);
 setTimeout(() => { suppressTap = false; }, 60);
 }
@@ -1632,17 +1725,19 @@ onTap(e);
 }
 
 function d2edPlaceButton() {
-const b = D2ED.button;
-const pb = D2ED.pullBtn;
-if (!b) return;
+const btns = [D2ED.button, D2ED.pullBtn, D2ED.shinraBtn].filter(Boolean);
+if (!btns.length) return;
 const hidden = !!D2ED.panel || !!D2EC.overlay || !!D2IE.overlay;
-b.style.display = hidden ? 'none' : 'block';
-if (pb) pb.style.display = hidden ? 'none' : 'block';
-if (!hidden && pb) {
-const bRect = b.getBoundingClientRect();
-const pRect = pb.getBoundingClientRect();
-if (bRect.width && pRect.width && rectsOverlap(bRect, pRect, BTN_GAP)) {
-resolveNonOverlap(pb, b);
+for (const el of btns) el.style.display = hidden ? 'none' : 'block';
+if (!hidden) {
+for (let i = 0; i < btns.length; i++) {
+const cur = btns[i];
+const others = btns.filter((_, idx) => idx !== i);
+const cRect = cur.getBoundingClientRect();
+const oRects = others.map(o => o.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
+if (cRect.width > 0 && cRect.height > 0 && overlapsAny(cRect, oRects, BTN_GAP)) {
+resolveNonOverlap(cur, others);
+}
 }
 }
 requestAnimationFrame(d2edPlaceButton);
@@ -1654,6 +1749,7 @@ d2edBuildInstall();
 d2ecWorldInstall();
 d2gameInstall();
 D2ED.forge = { game: D2GAME, show: d2ieShow, entries: d2ieEntries, select: d2ieSelect, lines: d2ieAnvilLines };
+D2ED.shinra = { dist: D2ED_SHINRA_DIST, angle: D2ED_SHINRA_ANGLE, pull: d2edPullEnemiesToFixedPoint, autoOn: d2edShinraAutoOn };
 d2edKeepLeaderboardOff();
 d2edPerfApplyDpr();
 setTimeout(d2edPerfApplyGame, 1500);
@@ -1782,14 +1878,18 @@ document.head.append(style);
 
 D2ED.button = d2edEl('button', { id: 'd2ed-btn', class: 'd2ed-top-btn', type: 'button' }, '大神系統');
 D2ED.pullBtn = d2edEl('button', { id: 'd2ed-pull-btn', class: 'd2ed-top-btn', type: 'button' }, '吞天');
+D2ED.shinraBtn = d2edEl('button', { id: 'd2ed-shinra-btn', class: 'd2ed-top-btn', type: 'button' }, '神羅天征');
 d2edSyncPullLabel();
-document.body.append(D2ED.button, D2ED.pullBtn);
+d2edSyncShinraLabel();
+document.body.append(D2ED.button, D2ED.pullBtn, D2ED.shinraBtn);
 
-attachDraggable(D2ED.button, D2ED_SYS_POS_KEY, () => D2ED.pullBtn, () => {
+const allTopBtns = () => [D2ED.button, D2ED.pullBtn, D2ED.shinraBtn];
+
+attachDraggable(D2ED.button, D2ED_SYS_POS_KEY, allTopBtns, () => {
 d2edOpen();
 });
 
-attachDraggable(D2ED.pullBtn, D2ED_PULL_POS_KEY, () => D2ED.button, () => {
+attachDraggable(D2ED.pullBtn, D2ED_PULL_POS_KEY, allTopBtns, () => {
 const res = d2edPullItemsToPlayer();
 pullTempText = res.total ? `吞天 ${res.items}物/${res.chests}箱` : '吞天 (無)';
 d2edSyncPullLabel();
@@ -1807,6 +1907,27 @@ const next = !d2edEndPullOn();
 try { localStorage.setItem(D2ED_ENDPULL_KEY, next ? '1' : '0'); } catch (_) {}
 pullTempText = '';
 d2edSyncPullLabel();
+if (D2ED.panel) d2edRender();
+});
+
+attachDraggable(D2ED.shinraBtn, D2ED_SHINRA_POS_KEY, allTopBtns, () => {
+const res = d2edPullEnemiesToFixedPoint(D2ED_SHINRA_DIST, D2ED_SHINRA_ANGLE);
+shinraTempText = !res.ready ? '神羅天征 (未抓到)' : res.pulled ? `神羅天征 ${res.pulled}怪` : '神羅天征 (無)';
+d2edSyncShinraLabel();
+clearTimeout(shinraTempTimer);
+shinraTempTimer = setTimeout(() => {
+shinraTempText = '';
+d2edSyncShinraLabel();
+}, 1000);
+});
+
+D2ED.shinraBtn.addEventListener('contextmenu', (e) => {
+e.preventDefault();
+e.stopPropagation();
+const next = !d2edShinraAutoOn();
+try { localStorage.setItem(D2ED_SHINRA_AUTO_KEY, next ? '1' : '0'); } catch (_) {}
+shinraTempText = '';
+d2edSyncShinraLabel();
 if (D2ED.panel) d2edRender();
 });
 
