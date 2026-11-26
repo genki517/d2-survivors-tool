@@ -1,14 +1,14 @@
-void (function D2MOD_V5_LITE() {
-if (window.__D2MOD_V5_LOADED) return;
-window.__D2MOD_V5_LOADED = true;
+void (function D2MOD_V6_LITE() {
+if (window.__D2MOD_V6_LOADED) return;
+window.__D2MOD_V6_LOADED = true;
 
-const D2ZH_VERSION = 'V5大神精簡版';
+const D2ZH_VERSION = 'V6大神精簡版';
 window.__D2ZH_VERSION = D2ZH_VERSION;
 const UI_FONT = '"Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", sans-serif';
 const D2ED = {
 player: null, extras: null, world: null, build: null,
 added: new WeakMap(), changed: new WeakMap(), kept: new WeakSet(),
-button: null, pullBtn: null, anchorBtn: null, shinraBtn: null, panel: null, presetName: ''
+button: null, anchorBtn: null, panel: null, presetName: ''
 };
 const D2ED_SAVE_KEY = 'd2-survivors/save/v1';
 const D2ED_ELEMENTS = ['fire', 'cold', 'lightning', 'poison', 'magic'];
@@ -226,7 +226,7 @@ const e = document.createElement(tag);
 for (const [k, v] of Object.entries(attrs || {})) {
 if (k === 'style') e.style.cssText = v;
 else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-else e.setAttribute(k, v);
+else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : String(v));
 }
 for (const k of kids) if (k != null) e.append(k);
 return e;
@@ -236,10 +236,13 @@ return Number.isFinite(v) ? String(Number(v.toFixed(digits))) : '';
 }
 function d2edToast(msg) {
 const t = D2ED.panel && D2ED.panel.querySelector('.d2ed-msg');
-if (!t) return;
+if (t) {
 t.textContent = msg;
 clearTimeout(t._h);
 t._h = setTimeout(() => { t.textContent = ''; }, 2500);
+return;
+}
+console.log('[大神系統]', msg);
 }
 function d2edRunSection() {
 const box = d2edEl('section', { class: 'd2ed-sec' }, d2edEditTitle('本局人物'));
@@ -506,133 +509,6 @@ return d2edEl('h3', { style: 'display: flex; align-items: center; justify-conten
 d2edEl('button', { type: 'button', style: 'flex: none; font-size: 13px; font-weight: normal', onclick: d2edConfirmRelock }, '關閉修改功能'));
 }
 
-const D2ED_PERF_KEY = 'd2ed:perf';
-const D2ED_PERF_DPR = 1;
-const D2ED_FX_KEY = 'd2s:skill-effects';
-const D2ED_FX_BACKUP_KEY = 'd2ed:perfSkillEffects';
-const D2ED_WEATHER_KEY = 'd2s:weather';
-const D2ED_WEATHER_BACKUP_KEY = 'd2ed:perfWeather';
-const D2ED_PERF_GAME = { settings: undefined, orig: null };
-async function d2edPerfGameSettings() {
-if (D2ED_PERF_GAME.settings !== undefined) return D2ED_PERF_GAME.settings;
-D2ED_PERF_GAME.settings = null;
-const urls = [...new Set([...performance.getEntriesByType('resource').map(e => e.name), ...[...document.querySelectorAll('script[src]')].map(e => e.src), ...[...document.querySelectorAll('link[rel=modulepreload]')].map(e => e.href)])]
-.filter(n => /\/assets\/[^/]+\.js(\?|$)/.test(n) && !/\/ko-/.test(n) && !/\/game-[^/]+\.js/.test(n));
-urls.sort((a, b) => (/\/itemArt-/.test(b) ? 1 : 0) - (/\/itemArt-/.test(a) ? 1 : 0));
-for (const url of urls) {
-let m = null;
-try { m = await Promise.race([import(url), new Promise((_, no) => setTimeout(no, 3000))]); } catch (_) { continue; }
-const hit = m && Object.values(m).find(v => v && typeof v === 'object' && typeof v.lights === 'boolean' && typeof v.shadows === 'boolean' && 'res' in v && 'smoke' in v);
-if (hit) { D2ED_PERF_GAME.settings = hit; break; }
-}
-return D2ED_PERF_GAME.settings;
-}
-async function d2edPerfApplyGame() {
-try {
-const s = await d2edPerfGameSettings();
-if (!s) return;
-if (d2edPerfOn()) {
-if (!D2ED_PERF_GAME.orig) D2ED_PERF_GAME.orig = { lights: s.lights, shadows: s.shadows };
-s.lights = false;
-s.shadows = false;
-} else if (D2ED_PERF_GAME.orig) {
-s.lights = D2ED_PERF_GAME.orig.lights;
-s.shadows = D2ED_PERF_GAME.orig.shadows;
-D2ED_PERF_GAME.orig = null;
-}
-} catch (_) {}
-}
-function d2edPerfOn() {
-try { return localStorage.getItem(D2ED_PERF_KEY) === '1'; } catch (_) { return false; }
-}
-const D2ED_DPR_DESC = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
-function d2edPerfApplyDpr() {
-try {
-if (d2edPerfOn()) Object.defineProperty(window, 'devicePixelRatio', { configurable: true, enumerable: true, get: () => D2ED_PERF_DPR, set() {} });
-else if (D2ED_DPR_DESC) Object.defineProperty(window, 'devicePixelRatio', D2ED_DPR_DESC);
-else delete window.devicePixelRatio;
-} catch (_) {}
-}
-function d2edPerfSet(on) {
-try {
-if (on) {
-const fx = localStorage.getItem(D2ED_FX_KEY);
-localStorage.setItem(D2ED_FX_BACKUP_KEY, fx === null ? '' : fx);
-localStorage.setItem(D2ED_FX_KEY, '0');
-const weather = localStorage.getItem(D2ED_WEATHER_KEY);
-localStorage.setItem(D2ED_WEATHER_BACKUP_KEY, weather === null ? '' : weather);
-localStorage.setItem(D2ED_WEATHER_KEY, '0');
-localStorage.setItem(D2ED_PERF_KEY, '1');
-} else {
-const fx = localStorage.getItem(D2ED_FX_BACKUP_KEY);
-if (fx) localStorage.setItem(D2ED_FX_KEY, fx); else localStorage.removeItem(D2ED_FX_KEY);
-localStorage.removeItem(D2ED_FX_BACKUP_KEY);
-const weather = localStorage.getItem(D2ED_WEATHER_BACKUP_KEY);
-if (weather) localStorage.setItem(D2ED_WEATHER_KEY, weather); else localStorage.removeItem(D2ED_WEATHER_KEY);
-localStorage.removeItem(D2ED_WEATHER_BACKUP_KEY);
-localStorage.removeItem(D2ED_PERF_KEY);
-}
-} catch (e) { alert('無法儲存設定：' + e); return; }
-d2edPerfApplyDpr();
-d2edPerfApplyGame();
-}
-function d2edPerfSection() {
-const on = d2edPerfOn();
-const toggle = () => { d2edPerfSet(!on); d2edRender(); d2edToast(on ? '低效能模式已關閉' : '低效能模式已開啟'); };
-return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '低效能模式'),
-d2edEl('p', { class: 'd2ed-note' }, '技能特效調到最淡，關閉天氣（雪、雨）、光源和陰影；高解析度螢幕改用 1 倍解析度。'),
-d2edEl('div', { class: 'd2ed-row' }, d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉低效能模式' : '開啟低效能模式'),
-d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
-}
-
-const D2ED_BGMUTE_KEY = 'd2ed:bgMute';
-function d2edBgMuteOn() {
-try { return localStorage.getItem(D2ED_BGMUTE_KEY) !== '0'; } catch (_) { return true; }
-}
-(function d2edBgMuteInstall() {
-const contexts = new Set();
-const proto = window.BaseAudioContext?.prototype ?? window.AudioContext?.prototype;
-const desc = proto && Object.getOwnPropertyDescriptor(proto, 'currentTime');
-if (desc?.get && desc.configurable) {
-Object.defineProperty(proto, 'currentTime', { ...desc, get() { contexts.add(this); return desc.get.call(this); } });
-}
-let muted = new Set();
-const inBackground = () => (document.hidden || (window.__D2ZH_DESKTOP && !document.hasFocus())) && d2edBgMuteOn();
-const acProto = window.AudioContext?.prototype;
-const acResume = acProto && Object.getOwnPropertyDescriptor(acProto, 'resume');
-if (acResume?.value && acResume.configurable) {
-Object.defineProperty(acProto, 'resume', { ...acResume, value() { if (!inBackground()) return acResume.value.call(this); contexts.add(this); muted.add(this); return Promise.resolve(); } });
-}
-const apply = () => {
-try {
-if (inBackground()) {
-for (const c of contexts) if (c.state === 'running') { c.suspend().catch(() => {}); muted.add(c); }
-} else if (muted.size) {
-for (const c of muted) if (c.state === 'suspended') c.resume().catch(() => {});
-muted = new Set();
-}
-} catch (_) {}
-};
-document.addEventListener('visibilitychange', apply);
-window.addEventListener('blur', apply);
-window.addEventListener('focus', apply);
-setInterval(apply, 1000);
-D2ED.bgMuteApply = apply;
-})();
-function d2edBgMuteSet(on) {
-try { localStorage.setItem(D2ED_BGMUTE_KEY, on ? '1' : '0'); } catch (e) { alert('無法儲存設定：' + e); return; }
-D2ED.bgMuteApply?.();
-d2edRender(); d2edToast(on ? '背景靜音已開啟' : '背景靜音已關閉');
-}
-function d2edBgMuteSection() {
-const on = d2edBgMuteOn();
-const toggle = () => d2edBgMuteSet(!on);
-return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '背景靜音'),
-d2edEl('p', { class: 'd2ed-note' }, '切到其他分頁、被其他視窗蓋住或縮小時自動靜音，回到畫面恢復聲音。'),
-d2edEl('div', { class: 'd2ed-row' }, d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉背景靜音' : '開啟背景靜音'),
-d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
-}
-
 const D2ED_SHARD_KEY = 'd2ed:shardSense';
 function d2edShardOn() {
 try { return localStorage.getItem(D2ED_SHARD_KEY) === '1'; } catch (_) { return false; }
@@ -683,7 +559,6 @@ function d2edEndPullSection() {
 const on = d2edEndPullOn();
 const toggle = () => {
 try { localStorage.setItem(D2ED_ENDPULL_KEY, on ? '0' : '1'); } catch (e) { alert('無法儲存設定：' + e); return; }
-if (typeof d2edSyncPullLabel === 'function') d2edSyncPullLabel();
 d2edRender(); d2edToast(on ? '自動吞天已關閉' : '自動吞天已開啟');
 };
 const pullNow = () => {
@@ -691,7 +566,7 @@ const res = d2edPullItemsToPlayer();
 d2edToast(res.total ? `已吞天 ${res.items} 物 / ${res.chests} 箱` : '目前沒有可吞天的道具或寶箱');
 };
 return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '吞天（自動吸物與寶箱）'),
-d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未開啟寶箱拉到腳邊（也可直接點「吞天」按鈕手動吸取，右鍵「吞天」可切換自動）。'),
+d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未開啟寶箱拉到腳邊，也可直接點「立即吞天」手動吸取。'),
 d2edEl('div', { class: 'd2ed-row' },
 d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動吞天' : '開啟自動吞天'),
 d2edEl('button', { type: 'button', onclick: pullNow }, '立即吞天'),
@@ -721,7 +596,7 @@ d2edShinraAnchor = {
 x: w.player.x + Math.cos(angle) * dist,
 y: w.player.y + Math.sin(angle) * dist
 };
-if (typeof d2edSyncShinraLabel === 'function') d2edSyncShinraLabel();
+if (typeof d2edSyncAnchorLabel === 'function') d2edSyncAnchorLabel();
 return d2edShinraAnchor;
 }
 
@@ -760,7 +635,6 @@ function d2edShinraSection() {
 const on = d2edShinraAutoOn();
 const toggle = () => {
 try { localStorage.setItem(D2ED_SHINRA_AUTO_KEY, on ? '0' : '1'); } catch (e) { alert('無法儲存設定：' + e); return; }
-if (typeof d2edSyncShinraLabel === 'function') d2edSyncShinraLabel();
 d2edRender(); d2edToast(on ? '自動神羅天征已關閉' : '自動神羅天征已開啟');
 };
 const reAnchorPull = () => {
@@ -777,7 +651,7 @@ const anchorInfo = d2edShinraAnchor
 ? `已鎖定座標 (${d2edShinraAnchor.x.toFixed(0)}, ${d2edShinraAnchor.y.toFixed(0)})`
 : '尚未鎖定座標（首次吸怪將自動記住目前角色右邊 200）';
 return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, `神羅天征（${D2ED_SHINRA_VER} 鎖定座標吸怪）`),
-d2edEl('p', { class: 'd2ed-note' }, `${anchorInfo}。人物走動時怪物仍吸往已鎖定座標；點「定點」或前方「定點」小按鈕可重新記住目前角色右邊 ${D2ED_SHINRA_DIST} 距離的位置。`),
+d2edEl('p', { class: 'd2ed-note' }, `${anchorInfo}。人物走動時怪物仍吸往已鎖定座標；點「定點」可重新記住目前角色右邊 ${D2ED_SHINRA_DIST} 距離的位置並吸怪。`),
 d2edEl('div', { class: 'd2ed-row' },
 d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動神羅天征' : '開啟自動神羅天征'),
 d2edEl('button', { type: 'button', onclick: reAnchorPull }, '定點並吸怪'),
@@ -785,27 +659,20 @@ d2edEl('button', { type: 'button', onclick: pullNow }, '立即吸怪'),
 d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '自動：開' : '自動：關')));
 }
 
-const D2ED_SKILLZOOM_KEY = 'd2ed:skillZoom';
-function d2edSkillZoomOn() {
-try { return localStorage.getItem(D2ED_SKILLZOOM_KEY) === '1'; } catch (_) { return false; }
-}
-function d2edSkillZoomSection() {
-const on = d2edSkillZoomOn();
-const toggle = () => {
-try { on ? localStorage.removeItem(D2ED_SKILLZOOM_KEY) : localStorage.setItem(D2ED_SKILLZOOM_KEY, '1'); } catch (e) { alert('無法儲存設定：' + e); return; }
-d2edRender(); d2edToast(on ? '技能格調整大小已關閉' : '技能格調整大小已開啟');
-};
-return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '技能格調整大小'),
-d2edEl('p', { class: 'd2ed-note' }, '開啟後可調整技能選單縮放比例。'),
-d2edEl('div', { class: 'd2ed-row' }, d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉技能格調整大小' : '開啟技能格調整大小'),
-d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
-}
-
-// === 裝備修改（挑身上或物品欄裝備，指定每行強化次數） ===
+// === 裝備修改（升級為圖 2 樣式：暗金框、左右分欄、指定強化與詞綴／數值調整） ===
 const D2GAME = { proto: null, game: null, tries: 0 };
+const D2FORGE_KEY = 'd2zh:forgeSure';
+const D2FORGE_SHOW = true;
+const D2IE_AFFIX_SHOW = true;
 const D2IE_TEMPER_MAX = 10;
 const D2IE_SLOT = { weapon: '武器', shield: '副手', helm: '頭盔', head: '頭盔', body: '身體護甲', armor: '身體護甲', gloves: '手套', belt: '腰帶', boots: '靴子', amulet: '護身符', ring: '戒指', ring1: '左戒指', ring2: '右戒指', ringLeft: '左戒指', ringRight: '右戒指' };
-const D2IE = { overlay: null, pick: null };
+const D2IE = { overlay: null, pick: null, pools: new Map() };
+const D2IE_IS_AFF = m => !m.implicit && !m.auto && !m.staff;
+
+function d2forgeSureOn() {
+if (!D2FORGE_SHOW) return false;
+try { return localStorage.getItem(D2FORGE_KEY) !== '0'; } catch (_) { return true; }
+}
 function d2gameUrls() {
 return [...new Set([...performance.getEntriesByType('resource').map(e => e.name), ...[...document.querySelectorAll('script[src]')].map(e => e.src), ...[...document.querySelectorAll('link[rel=modulepreload]')].map(e => e.href)])].filter(n => /\/assets\/[^/]+\.js(\?|$)/.test(n) && !/\/ko-/.test(n));
 }
@@ -832,7 +699,75 @@ D2GAME.proto = P;
 const rawTick = P.tick;
 P.tick = function () { D2GAME.game = this; return rawTick.apply(this, arguments); };
 const rawTry = P.forgeTry;
-P.forgeTry = async function () { D2GAME.game = this; return rawTry.apply(this, arguments); };
+P.forgeTry = async function (cls, level, act) {
+D2GAME.game = this;
+if (!d2forgeSureOn() || (act !== 'temper' && act !== 'hellforge')) return rawTry.apply(this, arguments);
+if (act === 'temper') {
+let r;
+for (let i = 0; i < 60; i++) {
+const snap = d2forgeEssenceSnap(this.save);
+r = await rawTry.apply(this, arguments);
+if (!r || r.text !== 'The temper failed') return r;
+if (!d2forgeEssenceRestore(this, cls, snap)) return r;
+}
+return r;
+}
+const before = d2gameFindItem(this.save, this.anvil);
+const t0 = before && before.forge && before.forge.t ? { ...before.forge.t } : null;
+const r = await rawTry.apply(this, arguments);
+if (r && r.text === 'All tempers lost' && t0 && Object.keys(t0).length) {
+const it = d2gameFindItem(this.save, this.anvil);
+if (it) {
+const t = {};
+for (const [k, n] of Object.entries(t0)) t[k] = Math.min(n * 2, 1e5);
+this.changeGear(cls, () => { it.forge = { ...(it.forge || {}), t, hf: 1 }; });
+return { ...r, text: 'All tempers doubled', color: 'gold' };
+}
+}
+return r;
+};
+}
+function d2forgeEssenceSnap(save) {
+const out = [], seen = new Set();
+const walk = (o, depth) => {
+if (!o || typeof o !== 'object' || seen.has(o) || depth > 7) return;
+seen.add(o);
+if (Array.isArray(o)) o.forEach((v, i) => {
+if (v && typeof v === 'object' && v.type === 'essence' && typeof v.count === 'number') {
+out.push({ arr: o, i, item: v, count: v.count, copy: JSON.parse(JSON.stringify(v)) });
+}
+});
+for (const v of Array.isArray(o) ? o : Object.values(o)) walk(v, depth + 1);
+};
+walk(save, 0);
+return out;
+}
+function d2forgeEssenceRestore(game, cls, snap) {
+const fix = snap.filter(s => !s.arr.includes(s.item) || s.item.count < s.count);
+if (!fix.length || typeof game.changeGear !== 'function') return false;
+game.changeGear(cls, () => {
+for (const s of fix) {
+if (s.arr.includes(s.item)) s.item.count = s.count;
+else if (s.arr[s.i] == null) s.arr[s.i] = s.copy;
+else s.arr.splice(s.i, 0, s.copy);
+}
+});
+return true;
+}
+function d2gameFindItem(save, id) {
+if (!save || !id) return null;
+const seen = new Set();
+const walk = (o, depth) => {
+if (!o || typeof o !== 'object' || seen.has(o) || depth > 7) return null;
+seen.add(o);
+if (o.id === id && typeof o.base === 'string') return o;
+for (const v of Array.isArray(o) ? o : Object.values(o)) {
+const hit = walk(v, depth + 1);
+if (hit) return hit;
+}
+return null;
+};
+return walk(save, 0);
 }
 function d2ieGame() {
 const g = D2GAME.game;
@@ -858,14 +793,57 @@ const f = D2EC.api && D2EC.api.anvilLines;
 if (!f) return null;
 try { return f(item, 0, d2ieLevel(), 1).lines || []; } catch (_) { return null; }
 }
-function d2ieTemperCap(item) {
-return item.forge && item.forge.hf ? D2IE_TEMPER_MAX * 2 : D2IE_TEMPER_MAX;
+function d2ieTemperCap(item, lines) {
+let cap = null;
+try { const v = D2EC.api.anvilLines(item, 0, d2ieLevel(), 1); if (v && typeof v.cap === 'number') cap = v.cap; } catch (_) {}
+if (cap === null) {
+cap = Math.min(D2IE_TEMPER_MAX, 2 * (lines || []).filter(l => l.key).reduce((a, l) => a + (l.rolls || 1), 0))
+* (item.forge && item.forge.hf ? 2 : 1);
+}
+return cap;
+}
+function d2ieModName(stat) {
+return stat;
+}
+function d2ieModText(item, mod) {
+const lines = d2ieAnvilLines({ ...item, mods: [mod], stats: undefined, bonus: undefined, forge: undefined, sockets: undefined, socketed: undefined, rarity: 'magic' });
+const text = lines && lines.map(l => l.text).filter(Boolean).join('、');
+return text || `${d2ieModName(mod.stat)} ${mod.value}`;
+}
+function d2ieAffixPool(base) {
+if (D2IE.pools.has(base)) return D2IE.pools.get(base);
+const pool = new Map();
+for (const roll of (D2EC.api && D2EC.api.rollers) || []) {
+for (let n = 0; n < 600; n++) {
+let it;
+try { it = roll({ base }, 1 + (n % 99), 99, undefined); } catch (_) { break; }
+if (!it || (it.rarity !== 'magic' && it.rarity !== 'rare')) continue;
+for (const m of it.mods || []) {
+if (!D2IE_IS_AFF(m) || typeof m.stat !== 'string' || typeof m.value !== 'number') continue;
+const p = pool.get(m.stat);
+if (!p) pool.set(m.stat, { stat: m.stat, lo: m.value, hi: m.value, mod: { ...m } });
+else { p.lo = Math.min(p.lo, m.value); p.hi = Math.max(p.hi, m.value); }
+}
+}
+}
+D2IE.pools.set(base, pool);
+return pool;
 }
 function d2ieChange(item, fn) {
 const g = d2ieGame();
 if (!g) return false;
 g.changeGear(g.kit.id, () => fn(item));
 return true;
+}
+function d2ieReplace(item, next) {
+delete next.roll;
+let ready = null;
+try { ready = D2EC.api.normalize(JSON.parse(JSON.stringify(next))); } catch (_) { ready = null; }
+if (!ready) return false;
+return d2ieChange(item, it => {
+for (const k of Object.keys(it)) delete it[k];
+Object.assign(it, ready);
+});
 }
 function d2ieClose() {
 if (!D2IE.overlay) return;
@@ -898,6 +876,8 @@ const api = await d2ecLoad();
 if (D2IE.overlay !== overlay) return;
 if (!api) { list.replaceChildren(d2edEl('p', { class: 'd2ec-hint' }, '讀不到遊戲的裝備資料。')); return; }
 d2ieList();
+const entries = d2ieEntries();
+if (entries.length) d2ieSelect(entries[0].item);
 }
 function d2ieList() {
 const list = D2IE.overlay && D2IE.overlay.querySelector('.d2ec-results');
@@ -919,7 +899,7 @@ const box = D2IE.overlay.querySelector('.d2ec-editor');
 const rarityZh = { normal: '普通', magic: '魔法', rare: '稀有', unique: '獨特', set: '套裝', runeword: '符文之語' }[item.rarity] || item.rarity;
 const head = d2edEl('div', { class: 'd2ec-title d2ec-r-' + item.rarity }, d2ecIcon(item.rarity, item.name, item.base),
 d2edEl('div', {}, d2edEl('b', {}, item.name), d2edEl('small', {}, `${rarityZh}・${item.base}`)));
-box.replaceChildren(head, ...d2ieTemperPart(item), d2edEl('div', { class: 'd2ec-actions' }, d2edEl('span', { class: 'd2ec-msg' })));
+box.replaceChildren(head, ...d2ieTemperPart(item), ...(D2IE_AFFIX_SHOW ? d2ieAffixPart(item) : []), d2edEl('div', { class: 'd2ec-actions' }, d2edEl('span', { class: 'd2ec-msg' })));
 }
 function d2ieTemperPart(item) {
 const out = [d2edEl('h4', {}, '指定強化')];
@@ -928,7 +908,7 @@ if (!lines) { out.push(d2edEl('p', { class: 'd2ec-fixed' }, '讀不到鐵砧的�
 const rows = lines.filter(l => l.key);
 if (!rows.length) { out.push(d2edEl('p', { class: 'd2ec-fixed' }, '這件裝備沒有可以強化的能力。')); return out; }
 const held = (item.forge && item.forge.t) || {};
-const cap = d2ieTemperCap(item);
+const cap = d2ieTemperCap(item, rows);
 const reads = [];
 const total = d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' });
 const showTotal = () => {
@@ -937,7 +917,7 @@ total.textContent = `合計 ${sum} / ${cap} 次`;
 total.style.color = sum > cap ? '#ff8a7a' : '';
 };
 for (const l of rows) {
-const row = d2ecNumberRow(v => `${l.text}（強化 ${v} 次）`, 0, cap, Math.min(cap, held[l.key] || 0), read => reads.push([l.key, read]));
+const row = d2ecNumberRow(v => `${l.text}（強化 ${held[l.key] || 0} 次）`, 0, cap, Math.min(cap, held[l.key] || 0), read => reads.push([l.key, read]));
 row.querySelector('input').addEventListener('input', showTotal);
 out.push(row);
 }
@@ -957,17 +937,127 @@ if (!ok) { d2ieMsg('找不到遊戲資料，沒有套用', true); return; }
 d2ieSelect(item);
 d2ieMsg(clear ? '已清除所有強化' : '已套用強化');
 };
-out.push(d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, cap > D2IE_TEMPER_MAX ? '數量型能力每強化一次 +20%（至少 +1），技能等級每次 +1 級。這件經過地獄熔爐加倍，上限是 20 次。' : '數量型能力每強化一次 +20%（至少 +1），技能等級每次 +1 級。每件最多 10 次，跟恰西擴鑽一樣。'),
+out.push(d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, `數量型能力每強化一次 +40%（至少 +1），技能等級每次 +1 級。這件最多 ${cap} 次（每一行 2 次、最多 10 次${item.forge && item.forge.hf ? '，經過地獄熔爐加倍' : ''}），跟恰西鐵砧的上限一樣。`),
+d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, '用這裡改過強化的裝備，之後再放上恰西的鐵砧時，遊戲會改回鐵砧伺服器上的紀錄。'),
 d2edEl('div', { class: 'd2ed-row', style: 'margin: 6px 0' },
 d2edEl('button', { type: 'button', class: 'd2ec-ok', onclick: () => apply(false) }, '套用強化'),
 d2edEl('button', { type: 'button', onclick: () => apply(true) }, '全部清除')));
 return out;
 }
+function d2ieAffixPart(item) {
+const out = [d2edEl('h4', {}, '詞綴')];
+if (item.stats) return out.concat(d2ieStatsPart(item));
+if (item.rarity !== 'magic' && item.rarity !== 'rare') {
+out.push(d2edEl('p', { class: 'd2ec-fixed' }, '普通品質的裝備沒有詞綴。'));
+return out;
+}
+const pool = d2ieAffixPool(item.base);
+const keep = item.mods.filter(m => !D2IE_IS_AFF(m));
+const rows = item.mods.filter(D2IE_IS_AFF).map(m => ({ mod: { ...m } }));
+const wrap = d2edEl('div', {});
+const keepValues = () => { for (const r of rows) if (r.read) r.mod.value = r.read(); };
+const draw = () => {
+wrap.replaceChildren();
+rows.forEach((r, k) => {
+const p = pool.get(r.mod.stat);
+const lo = Math.min(1, r.mod.value), hi = Math.max(p ? p.hi : r.mod.value, r.mod.value);
+const del = d2edEl('button', { type: 'button', onclick: () => { keepValues(); rows.splice(k, 1); draw(); } }, '移除');
+const row = d2ecNumberRow(v => d2ieModText(item, { ...r.mod, value: v }), lo, hi, r.mod.value, read => { r.read = read; });
+row.append(del);
+wrap.append(row);
+});
+if (!rows.length) wrap.append(d2edEl('p', { class: 'd2ec-fixed' }, '（沒有詞綴）'));
+};
+draw();
+const opts = [...pool.values()].map(p => [p.stat, d2ieModText(item, { ...p.mod, value: p.hi })]).sort((a, b) => a[1].localeCompare(b[1]));
+const pick = d2edEl('select', {}, d2edEl('option', { value: '' }, opts.length ? '選擇要加入的詞綴…' : '找不到這種底材的詞綴資料'),
+...opts.map(([v, t]) => d2edEl('option', { value: v }, t)));
+const add = () => {
+const p = pool.get(pick.value);
+if (!p) return;
+keepValues();
+rows.push({ mod: { ...p.mod, value: p.hi } });
+pick.value = '';
+draw();
+};
+const limit = item.rarity === 'magic' ? '魔法物品原本最多 2 條詞綴（前綴、後綴各一）。' : '稀有物品原本最多 6 條詞綴（前綴、後綴各三）。';
+const apply = () => {
+const affixes = rows.map(r => ({ ...r.mod, value: r.read ? r.read() : r.mod.value }));
+const min = affixes.find(m => /MinDamage$|mindam$/.test(m.stat));
+if (min) for (const m of affixes) if (m.stat === min.stat.replace(/Min/, 'Max').replace(/min/, 'max') && m.value < min.value) m.value = min.value;
+const next = { ...JSON.parse(JSON.stringify(item)), mods: [...keep.map(m => ({ ...m })), ...affixes] };
+const t = item.forge && item.forge.t;
+if (t) {
+const used = new Set(), moved = {};
+for (const [key, n] of Object.entries(t)) {
+if (key[0] !== 'm') { moved[key] = n; continue; }
+const old = item.mods[Number(key.slice(1))];
+const at = old ? next.mods.findIndex((m, i) => !used.has(i) && m.stat === old.stat && !!m.implicit === !!old.implicit) : -1;
+if (at >= 0) { used.add(at); moved['m' + at] = n; }
+}
+next.forge = { ...next.forge };
+if (Object.keys(moved).length) next.forge.t = moved; else delete next.forge.t;
+if (!Object.keys(next.forge).length) delete next.forge;
+}
+if (!d2ieReplace(item, next)) { d2ieMsg('遊戲不接受這樣的詞綴組合，沒有套用', true); return; }
+d2ieSelect(item);
+d2ieMsg('已套用詞綴');
+};
+out.push(wrap, d2edEl('label', { class: 'd2ec-row' }, pick, d2edEl('button', { type: 'button', onclick: add }, '加入')),
+d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, `數值上限是這種底材掉落時出現過的最大值。${limit}遊戲不接受的組合會顯示「沒有套用」，裝備不會被改。`),
+d2edEl('div', { class: 'd2ed-row', style: 'margin: 6px 0' }, d2edEl('button', { type: 'button', class: 'd2ec-ok', onclick: apply }, '套用詞綴')));
+return out;
+}
+function d2ieStatsPart(item) {
+const api = D2EC.api;
+const def = api.all && api.all.find(d => d.rarity === item.rarity && d.name === item.name);
+let groups = null;
+const clone = JSON.parse(JSON.stringify(item));
+try { if (def) groups = d2ecGroups(def, item.base, clone); } catch (_) { groups = null; }
+if (!groups) return [d2edEl('p', { class: 'd2ec-fixed' }, '這件裝備的能力和物品表對不起來，無法調整。')];
+const out = [];
+for (const g of groups) {
+const stats = g.at === 'stats' ? clone.stats : clone.bonus[g.at];
+if (g.tag) out.push(d2edEl('h4', {}, g.tag));
+for (const row of g.rows) {
+const cur = stats[row.slots[0].i][row.slots[0].field];
+if (d2ecLineTexts(row.idxs.map(i => ({ ...stats[i] }))).length) {
+out.push(d2ecNumberRow(v => d2ecRowText(row, stats, v), row.lo, row.hi, Math.min(row.hi, Math.max(row.lo, Math.trunc(cur))), read => { row.read = read; }));
+}
+}
+for (const line of d2ecLineTexts(g.fixed.map(s => ({ ...s })))) out.push(d2edEl('p', { class: 'd2ec-fixed' }, line));
+}
+const apply = () => {
+const next = JSON.parse(JSON.stringify(item));
+for (const g of groups) {
+const stats = g.at === 'stats' ? next.stats : next.bonus[g.at];
+for (const row of g.rows) if (row.read) for (const s of row.slots) stats[s.i][s.field] = row.read();
+}
+if (!d2ieReplace(item, next)) { d2ieMsg('遊戲不接受這些數值，沒有套用', true); return; }
+d2ieSelect(item);
+d2ieMsg('已套用詞綴');
+};
+out.push(d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, '每一行可以在這件裝備的能力範圍內調整。'),
+d2edEl('div', { class: 'd2ed-row', style: 'margin: 6px 0' }, d2edEl('button', { type: 'button', class: 'd2ec-ok', onclick: apply }, '套用詞綴')));
+return out;
+}
 function d2edForgeSection() {
+const on = d2forgeSureOn();
+const toggle = () => {
+try { localStorage.setItem(D2FORGE_KEY, on ? '0' : '1'); } catch (e) { alert('無法儲存設定：' + e); return; }
+d2edRender();
+d2edToast(on ? '鐵砧必定成功已關閉' : '鐵砧必定成功已開啟');
+};
 const game = d2ieGame();
 const ready = !!game;
-return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '裝備修改'),
-d2edEl('p', { class: 'd2ed-note' }, '挑身上或物品欄的裝備，直接指定每一行能力的強化次數（跟恰西擴鑽一樣，每件最多 10 次）。'),
+return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, D2FORGE_SHOW ? '鐵砧與裝備修改' : '裝備修改'),
+D2FORGE_SHOW ? d2edEl('p', { class: 'd2ed-note' }, '鐵砧必定成功：淬鍊失敗時自動退回精華再試，直到成功；地獄熔爐一定是「淬鍊全部加倍」。') : null,
+D2FORGE_SHOW ? d2edEl('div', { class: 'd2ed-row' },
+d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉鐵砧必定成功' : '開啟鐵砧必定成功'),
+d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')) : null,
+d2edEl('p', { class: 'd2ed-note' }, D2IE_AFFIX_SHOW
+? '選身上或物品欄的裝備，直接指定每一行的強化次數，或自己挑選、調整裝備上的詞綴。'
+: '選身上或物品欄的裝備，直接指定每一行能力的強化次數（跟恰西擴鑽一樣，每件最多 10 次）。'),
 d2edEl('div', { class: 'd2ed-row' },
 d2edEl('button', { type: 'button', class: 'd2ed-main', ...(!ready && { disabled: '' }), onclick: d2ieShow }, '裝備修改'),
 ready ? null : d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, '選好英雄（進營地或遊戲中）後才能使用')));
@@ -1491,17 +1581,22 @@ card.append(modal);
 }
 
 function d2edRender() {
-const body = D2ED.panel.querySelector('.d2ed-body');
+const body = D2ED.panel && D2ED.panel.querySelector('.d2ed-body');
+if (!body) return;
 const inRun = !document.body.classList.contains('no-run');
 const sections = d2edUnlocked()
-? [inRun ? d2edRunSection() : d2edSaveSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edShinraSection(), d2edSkillZoomSection()]
-: [d2edLockSection(), d2edForgeSection(), d2edPerfSection(), d2edBgMuteSection(), d2edShardSection(), d2edEndPullSection(), d2edShinraSection(), d2edSkillZoomSection()];
+? [inRun ? d2edRunSection() : d2edSaveSection(), d2edForgeSection(), d2edShardSection(), d2edEndPullSection(), d2edShinraSection()]
+: [d2edLockSection(), d2edForgeSection(), d2edShardSection(), d2edEndPullSection(), d2edShinraSection()];
 body.replaceChildren(...sections);
 }
 
 function d2edOpen() {
 if (D2ED.panel) return;
-const close = () => { D2ED.panel.remove(); D2ED.panel = null; };
+const close = () => {
+D2ED.panel.remove();
+D2ED.panel = null;
+d2edSyncLinkedState();
+};
 D2ED.panel = d2edEl('div', { id: 'd2ed-overlay', onclick: e => { if (e.target.id === 'd2ed-overlay') close(); } },
 d2edEl('div', { class: 'd2ed-card', role: 'dialog', 'aria-label': '大神系統' },
 d2edEl('div', { class: 'd2ed-head' }, d2edEl('b', {}, '大神系統'), d2edEl('span', { class: 'd2ed-ver', title: '版本' }, D2ZH_VERSION), d2edEl('span', { class: 'd2ed-msg' }),
@@ -1510,41 +1605,41 @@ d2edEl('div', { class: 'd2ed-body' })));
 D2ED.panel.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') close(); });
 document.body.append(D2ED.panel);
 d2edRender();
+d2edSyncLinkedState();
 }
 
-// === 可拖動浮動按鈕（縮小約 30%，禁止互相重疊，神羅天征 V1 含前方「定點」小按鈕） ===
+function d2edTogglePanel() {
+if (D2ED.panel) {
+D2ED.panel.remove();
+D2ED.panel = null;
+d2edSyncLinkedState();
+} else {
+d2edOpen();
+}
+}
+
+// === 大神系統按鈕 + 神羅天征「定點」按鈕連動（定點怪物座標） ===
 const D2ED_SYS_POS_KEY = 'd2ed:大神系統Pos';
-const D2ED_PULL_POS_KEY = 'd2ed:吞天Pos';
-const D2ED_SHINRA_POS_KEY = 'd2ed:神羅天征Pos';
 const BTN_GAP = 6;
 const PAIR_GAP = 4;
-let pullTempText = '';
-let pullTempTimer = null;
-let shinraTempText = '';
-let shinraTempTimer = null;
 let anchorTempText = '';
 let anchorTempTimer = null;
 
-function d2edSyncPullLabel() {
-const pb = D2ED.pullBtn;
-if (!pb) return;
-if (pullTempText) {
-pb.textContent = pullTempText;
-return;
+function d2edSyncAnchorLabel() {
+if (D2ED.anchorBtn) {
+D2ED.anchorBtn.textContent = anchorTempText || '定點';
 }
-pb.textContent = `吞天 (自動:${d2edEndPullOn() ? '開' : '關'})`;
 }
 
-function d2edSyncShinraLabel() {
-const sb = D2ED.shinraBtn;
-const ab = D2ED.anchorBtn;
-if (sb) {
-const lockTag = d2edShinraAnchor ? '鎖' : '未鎖';
-sb.textContent = shinraTempText || `神羅天征[${lockTag}] (自動:${d2edShinraAutoOn() ? '開' : '關'})`;
+function d2edSyncLinkedState() {
+const open = !!D2ED.panel;
+if (D2ED.button) {
+D2ED.button.style.borderColor = open ? '#f0c94a' : '#8f743e';
 }
-if (ab) {
-ab.textContent = anchorTempText || '定點';
+if (D2ED.anchorBtn) {
+D2ED.anchorBtn.style.borderColor = open ? '#f0c94a' : (d2edShinraAnchor ? '#68d391' : '#c7a45f');
 }
+d2edSyncAnchorLabel();
 }
 
 function readSavedPos(key) {
@@ -1565,15 +1660,6 @@ localStorage.setItem(key, JSON.stringify({ left: rect.left, top: rect.top }));
 } catch (_) {}
 }
 
-function rectsOverlap(a, b, pad = BTN_GAP) {
-return !(
-a.left + a.width + pad <= b.left ||
-b.left + b.width + pad <= a.left ||
-a.top + a.height + pad <= b.top ||
-b.top + b.height + pad <= a.top
-);
-}
-
 function clampBox(left, top, width, height) {
 const maxLeft = Math.max(0, window.innerWidth - width);
 const maxTop = Math.max(0, window.innerHeight - height);
@@ -1585,370 +1671,100 @@ height
 };
 }
 
-function overlapsAny(box, others, pad = BTN_GAP) {
-return others.some(o => o && o.width > 0 && o.height > 0 && rectsOverlap(box, o, pad));
-}
-
-function getShinraGroupRect() {
-const sb = D2ED.shinraBtn;
+function getLinkedPairRect() {
+const b = D2ED.button;
 const ab = D2ED.anchorBtn;
-if (!sb) return null;
-const sRect = sb.getBoundingClientRect();
-const sw = sRect.width || 110;
-const sh = sRect.height || 24;
+if (!b) return null;
+const bRect = b.getBoundingClientRect();
+const bw = bRect.width || 64;
+const bh = bRect.height || 24;
 const aRect = ab ? ab.getBoundingClientRect() : null;
-const aw = (aRect && aRect.width) || 30;
+const aw = (aRect && aRect.width) || 32;
 const ah = (aRect && aRect.height) || 24;
-const totalW = ab ? (aw + PAIR_GAP + sw) : sw;
-const totalH = Math.max(sh, ah);
-let sLeft = parseFloat(sb.style.left);
-let sTop = parseFloat(sb.style.top);
-if (!Number.isFinite(sLeft) || !Number.isFinite(sTop)) {
-sLeft = sRect.left;
-sTop = sRect.top;
+let bLeft = parseFloat(b.style.left);
+let bTop = parseFloat(b.style.top);
+if (!Number.isFinite(bLeft) || !Number.isFinite(bTop)) {
+bLeft = bRect.left;
+bTop = bRect.top;
 }
-const minSLeft = ab ? (aw + PAIR_GAP) : 0;
-const clampedS = clampBox(Math.max(minSLeft, sLeft), sTop, sw, sh);
-const groupLeft = ab ? Math.max(0, clampedS.left - aw - PAIR_GAP) : clampedS.left;
-const groupTop = clampedS.top;
-return {
-sLeft: clampedS.left,
-sTop: clampedS.top,
-sw,
-sh,
-aLeft: groupLeft,
-aTop: groupTop,
-aw,
-ah,
-box: { left: groupLeft, top: groupTop, width: Math.min(window.innerWidth - groupLeft, totalW), height: totalH }
-};
+const minBLeft = ab ? (aw + PAIR_GAP) : 0;
+const clampedB = clampBox(Math.max(minBLeft, bLeft), bTop, bw, bh);
+const aLeft = ab ? Math.max(0, clampedB.left - aw - PAIR_GAP) : clampedB.left;
+const aTop = clampedB.top;
+return { bLeft: clampedB.left, bTop: clampedB.top, bw, bh, aLeft, aTop, aw, ah };
 }
 
-function applyShinraGroupCoords(sLeft, sTop, aLeft, aTop) {
-const sb = D2ED.shinraBtn;
-const ab = D2ED.anchorBtn;
-if (sb) {
-sb.style.left = `${sLeft}px`;
-sb.style.top = `${sTop}px`;
-sb.style.right = 'auto';
+function applyLinkedPairCoords(bLeft, bTop, aLeft, aTop) {
+if (D2ED.button) {
+D2ED.button.style.left = `${bLeft}px`;
+D2ED.button.style.top = `${bTop}px`;
+D2ED.button.style.right = 'auto';
 }
-if (ab) {
-ab.style.left = `${aLeft}px`;
-ab.style.top = `${aTop}px`;
-ab.style.right = 'auto';
+if (D2ED.anchorBtn) {
+D2ED.anchorBtn.style.left = `${aLeft}px`;
+D2ED.anchorBtn.style.top = `${aTop}px`;
+D2ED.anchorBtn.style.right = 'auto';
 }
-}
-
-function resolveNonOverlapForShinra(otherEls) {
-const others = (Array.isArray(otherEls) ? otherEls : [otherEls])
-.filter(el => el && el !== D2ED.shinraBtn && el !== D2ED.anchorBtn)
-.map(el => el.getBoundingClientRect())
-.filter(r => r.width > 0 && r.height > 0);
-const g = getShinraGroupRect();
-if (!g) return;
-if (!overlapsAny(g.box, others, BTN_GAP)) {
-applyShinraGroupCoords(g.sLeft, g.sTop, g.aLeft, g.aTop);
-return;
-}
-const w = g.box.width;
-const h = g.box.height;
-const aw = g.aw;
-const candidates = [];
-for (const oRect of others) {
-candidates.push(
-{ left: oRect.left - w - BTN_GAP, top: g.box.top },
-{ left: oRect.right + BTN_GAP, top: g.box.top },
-{ left: g.box.left, top: oRect.bottom + BTN_GAP },
-{ left: g.box.left, top: oRect.top - h - BTN_GAP },
-{ left: oRect.left - w - BTN_GAP, top: oRect.top },
-{ left: oRect.right + BTN_GAP, top: oRect.top }
-);
-}
-let best = null;
-let bestDist = Infinity;
-for (const c of candidates) {
-const clamped = clampBox(c.left, c.top, w, h);
-if (!overlapsAny(clamped, others, BTN_GAP)) {
-const dist = Math.hypot(clamped.left - g.box.left, clamped.top - g.box.top);
-if (dist < bestDist) {
-bestDist = dist;
-best = clamped;
-}
-}
-}
-if (!best) {
-for (let y = 0; y <= Math.max(0, window.innerHeight - h); y += 12) {
-for (let x = 0; x <= Math.max(0, window.innerWidth - w); x += 12) {
-const clamped = clampBox(x, y, w, h);
-if (!overlapsAny(clamped, others, BTN_GAP)) {
-const dist = Math.hypot(clamped.left - g.box.left, clamped.top - g.box.top);
-if (dist < bestDist) {
-bestDist = dist;
-best = clamped;
-}
-}
-}
-}
-}
-if (best) {
-const newALeft = best.left;
-const newSLeft = D2ED.anchorBtn ? (best.left + aw + PAIR_GAP) : best.left;
-applyShinraGroupCoords(newSLeft, best.top, newALeft, best.top);
-}
-}
-
-function resolveNonOverlap(movedEl, otherEls) {
-if (!movedEl) return;
-if (movedEl === D2ED.shinraBtn || movedEl === D2ED.anchorBtn) {
-resolveNonOverlapForShinra(otherEls);
-return;
-}
-const others = (Array.isArray(otherEls) ? otherEls : [otherEls])
-.filter(el => el && el !== movedEl)
-.flatMap(el => {
-if (el === D2ED.shinraBtn || el === D2ED.anchorBtn) {
-const g = getShinraGroupRect();
-return g ? [g.box] : [];
-}
-const r = el.getBoundingClientRect();
-return r.width > 0 && r.height > 0 ? [r] : [];
-});
-const mRect = movedEl.getBoundingClientRect();
-if (!mRect.width || !mRect.height) return;
-let box = clampBox(mRect.left, mRect.top, mRect.width, mRect.height);
-if (!overlapsAny(box, others, BTN_GAP)) {
-movedEl.style.left = `${box.left}px`;
-movedEl.style.top = `${box.top}px`;
-movedEl.style.right = 'auto';
-return;
-}
-const candidates = [];
-for (const oRect of others) {
-candidates.push(
-{ left: oRect.left - box.width - BTN_GAP, top: box.top },
-{ left: oRect.right + BTN_GAP, top: box.top },
-{ left: box.left, top: oRect.bottom + BTN_GAP },
-{ left: box.left, top: oRect.top - box.height - BTN_GAP },
-{ left: oRect.left - box.width - BTN_GAP, top: oRect.top },
-{ left: oRect.right + BTN_GAP, top: oRect.top }
-);
-}
-let best = null;
-let bestDist = Infinity;
-for (const c of candidates) {
-const clamped = clampBox(c.left, c.top, box.width, box.height);
-if (!overlapsAny(clamped, others, BTN_GAP)) {
-const dist = Math.hypot(clamped.left - box.left, clamped.top - box.top);
-if (dist < bestDist) {
-bestDist = dist;
-best = clamped;
-}
-}
-}
-if (!best) {
-for (let y = 0; y <= Math.max(0, window.innerHeight - box.height); y += 12) {
-for (let x = 0; x <= Math.max(0, window.innerWidth - box.width); x += 12) {
-const clamped = clampBox(x, y, box.width, box.height);
-if (!overlapsAny(clamped, others, BTN_GAP)) {
-const dist = Math.hypot(clamped.left - box.left, clamped.top - box.top);
-if (dist < bestDist) {
-bestDist = dist;
-best = clamped;
-}
-}
-}
-}
-}
-if (!best) best = box;
-movedEl.style.left = `${best.left}px`;
-movedEl.style.top = `${best.top}px`;
-movedEl.style.right = 'auto';
 }
 
 function initDefaultPositions() {
+const p = getLinkedPairRect();
+if (!p) return;
+const saved = readSavedPos(D2ED_SYS_POS_KEY);
+const defBLeft = window.innerWidth - p.bw - 12;
+const defBTop = 12;
+const targetB = saved ? clampBox(saved.left, saved.top, p.bw, p.bh) : clampBox(defBLeft, defBTop, p.bw, p.bh);
+const minBLeft = D2ED.anchorBtn ? (p.aw + PAIR_GAP) : 0;
+const bLeft = Math.max(minBLeft, targetB.left);
+const aLeft = D2ED.anchorBtn ? Math.max(0, bLeft - p.aw - PAIR_GAP) : bLeft;
+applyLinkedPairCoords(bLeft, targetB.top, aLeft, targetB.top);
+}
+
+function attachLinkedPairDraggable() {
 const b = D2ED.button;
-const pb = D2ED.pullBtn;
-const sb = D2ED.shinraBtn;
-if (!b || !pb || !sb) return;
-const bw = b.getBoundingClientRect().width || 68;
-const bh = b.getBoundingClientRect().height || 24;
-const pw = pb.getBoundingClientRect().width || 88;
-const ph = pb.getBoundingClientRect().height || 24;
-
-const savedB = readSavedPos(D2ED_SYS_POS_KEY);
-const savedP = readSavedPos(D2ED_PULL_POS_KEY);
-const savedS = readSavedPos(D2ED_SHINRA_POS_KEY);
-
-const defB = clampBox(window.innerWidth - bw - 12, 12, bw, bh);
-const posB = savedB ? clampBox(savedB.left, savedB.top, bw, bh) : defB;
-b.style.left = `${posB.left}px`;
-b.style.top = `${posB.top}px`;
-b.style.right = 'auto';
-
-const defP = clampBox(posB.left - pw - BTN_GAP, posB.top, pw, ph);
-const posP = savedP ? clampBox(savedP.left, savedP.top, pw, ph) : defP;
-pb.style.left = `${posP.left}px`;
-pb.style.top = `${posP.top}px`;
-pb.style.right = 'auto';
-if (overlapsAny(posP, [posB], BTN_GAP)) {
-resolveNonOverlap(pb, [b]);
-}
-
-const g = getShinraGroupRect();
-if (g) {
-const defS = clampBox(window.innerWidth - g.sw - 12, 42, g.sw, g.sh);
-const posS = savedS ? clampBox(savedS.left, savedS.top, g.sw, g.sh) : defS;
-const aLeft = D2ED.anchorBtn ? Math.max(0, posS.left - g.aw - PAIR_GAP) : posS.left;
-applyShinraGroupCoords(posS.left, posS.top, aLeft, posS.top);
-resolveNonOverlapForShinra([b, pb]);
-}
-}
-
-function attachDraggable(el, posKey, othersGetter, onTap) {
-let dragState = null;
-let suppressTap = false;
-
-el.addEventListener('pointerdown', (e) => {
-if (e.button === 2) return;
-e.preventDefault();
-e.stopPropagation();
-const rect = el.getBoundingClientRect();
-el.style.left = `${rect.left}px`;
-el.style.top = `${rect.top}px`;
-el.style.right = 'auto';
-el.style.cursor = 'grabbing';
-dragState = {
-pointerId: e.pointerId,
-startX: e.clientX,
-startY: e.clientY,
-originLeft: rect.left,
-originTop: rect.top,
-width: rect.width,
-height: rect.height,
-moved: false
-};
-try { el.setPointerCapture(e.pointerId); } catch (_) {}
-}, true);
-
-el.addEventListener('pointermove', (e) => {
-if (!dragState || e.pointerId !== dragState.pointerId) return;
-e.preventDefault();
-e.stopPropagation();
-const dx = e.clientX - dragState.startX;
-const dy = e.clientY - dragState.startY;
-if (!dragState.moved && Math.hypot(dx, dy) > 4) {
-dragState.moved = true;
-}
-if (dragState.moved) {
-let box = clampBox(dragState.originLeft + dx, dragState.originTop + dy, dragState.width, dragState.height);
-const others = (othersGetter() || [])
-.filter(o => o && o !== el)
-.map(o => o.getBoundingClientRect())
-.filter(r => r.width > 0 && r.height > 0);
-if (overlapsAny(box, others, BTN_GAP)) {
-const prevLeft = parseFloat(el.style.left) || box.left;
-const prevTop = parseFloat(el.style.top) || box.top;
-const tryX = clampBox(box.left, prevTop, dragState.width, dragState.height);
-const tryY = clampBox(prevLeft, box.top, dragState.width, dragState.height);
-if (!overlapsAny(tryX, others, BTN_GAP)) box = tryX;
-else if (!overlapsAny(tryY, others, BTN_GAP)) box = tryY;
-else box = clampBox(prevLeft, prevTop, dragState.width, dragState.height);
-}
-el.style.left = `${box.left}px`;
-el.style.top = `${box.top}px`;
-el.style.right = 'auto';
-}
-}, true);
-
-const finishDrag = (e) => {
-if (!dragState || e.pointerId !== dragState.pointerId) return;
-e.preventDefault();
-e.stopPropagation();
-el.style.cursor = 'grab';
-if (dragState.moved) {
-suppressTap = true;
-resolveNonOverlap(el, othersGetter());
-writeSavedPos(posKey, el);
-setTimeout(() => { suppressTap = false; }, 60);
-}
-try { el.releasePointerCapture(e.pointerId); } catch (_) {}
-dragState = null;
-};
-
-el.addEventListener('pointerup', finishDrag, true);
-el.addEventListener('pointercancel', finishDrag, true);
-
-el.addEventListener('click', (e) => {
-e.preventDefault();
-e.stopPropagation();
-if (suppressTap) return;
-onTap(e);
-});
-}
-
-function attachShinraPairDraggable(othersGetter) {
-const sb = D2ED.shinraBtn;
 const ab = D2ED.anchorBtn;
-if (!sb || !ab) return;
+if (!b || !ab) return;
 let dragState = null;
 let suppressTap = false;
 
-sb.addEventListener('pointerdown', (e) => {
+b.addEventListener('pointerdown', (e) => {
 if (e.button === 2) return;
 e.preventDefault();
 e.stopPropagation();
-const g = getShinraGroupRect();
-if (!g) return;
-applyShinraGroupCoords(g.sLeft, g.sTop, g.aLeft, g.aTop);
-sb.style.cursor = 'grabbing';
+const p = getLinkedPairRect();
+if (!p) return;
+applyLinkedPairCoords(p.bLeft, p.bTop, p.aLeft, p.aTop);
+b.style.cursor = 'grabbing';
 dragState = {
 pointerId: e.pointerId,
 startX: e.clientX,
 startY: e.clientY,
-originSLeft: g.sLeft,
-originSTop: g.sTop,
-originALeft: g.aLeft,
-originATop: g.aTop,
-sw: g.sw,
-sh: g.sh,
-aw: g.aw,
-ah: g.ah,
+originBLeft: p.bLeft,
+originBTop: p.bTop,
+bw: p.bw,
+bh: p.bh,
+aw: p.aw,
+ah: p.ah,
 moved: false
 };
-try { sb.setPointerCapture(e.pointerId); } catch (_) {}
+try { b.setPointerCapture(e.pointerId); } catch (_) {}
 }, true);
 
-sb.addEventListener('pointermove', (e) => {
+b.addEventListener('pointermove', (e) => {
 if (!dragState || e.pointerId !== dragState.pointerId) return;
 e.preventDefault();
 e.stopPropagation();
 const dx = e.clientX - dragState.startX;
 const dy = e.clientY - dragState.startY;
-if (!dragState.moved && Math.hypot(dx, dy) > 4) {
-dragState.moved = true;
-}
+if (!dragState.moved && Math.hypot(dx, dy) > 4) dragState.moved = true;
 if (dragState.moved) {
-const minSLeft = dragState.aw + PAIR_GAP;
-const maxSLeft = Math.max(minSLeft, window.innerWidth - dragState.sw);
-const maxSTop = Math.max(0, window.innerHeight - Math.max(dragState.sh, dragState.ah));
-const nextSLeft = Math.min(maxSLeft, Math.max(minSLeft, dragState.originSLeft + dx));
-const nextSTop = Math.min(maxSTop, Math.max(0, dragState.originSTop + dy));
-const nextALeft = Math.max(0, nextSLeft - dragState.aw - PAIR_GAP);
-const nextATop = nextSTop;
-
-const others = (othersGetter() || [])
-.filter(o => o && o !== sb && o !== ab)
-.map(o => o.getBoundingClientRect())
-.filter(r => r.width > 0 && r.height > 0);
-const groupBox = {
-left: nextALeft,
-top: nextATop,
-width: Math.max(1, (nextSLeft + dragState.sw) - nextALeft),
-height: Math.max(dragState.sh, dragState.ah)
-};
-if (!overlapsAny(groupBox, others, BTN_GAP)) {
-applyShinraGroupCoords(nextSLeft, nextSTop, nextALeft, nextATop);
-}
+const minBLeft = dragState.aw + PAIR_GAP;
+const maxBLeft = Math.max(minBLeft, window.innerWidth - dragState.bw);
+const maxBTop = Math.max(0, window.innerHeight - Math.max(dragState.bh, dragState.ah));
+const nextBLeft = Math.min(maxBLeft, Math.max(minBLeft, dragState.originBLeft + dx));
+const nextBTop = Math.min(maxBTop, Math.max(0, dragState.originBTop + dy));
+const nextALeft = Math.max(0, nextBLeft - dragState.aw - PAIR_GAP);
+applyLinkedPairCoords(nextBLeft, nextBTop, nextALeft, nextBTop);
 }
 }, true);
 
@@ -1956,74 +1772,50 @@ const finishDrag = (e) => {
 if (!dragState || e.pointerId !== dragState.pointerId) return;
 e.preventDefault();
 e.stopPropagation();
-sb.style.cursor = 'grab';
+b.style.cursor = 'grab';
 if (dragState.moved) {
 suppressTap = true;
-resolveNonOverlapForShinra(othersGetter());
-writeSavedPos(D2ED_SHINRA_POS_KEY, sb);
+writeSavedPos(D2ED_SYS_POS_KEY, b);
 setTimeout(() => { suppressTap = false; }, 60);
 }
-try { sb.releasePointerCapture(e.pointerId); } catch (_) {}
+try { b.releasePointerCapture(e.pointerId); } catch (_) {}
 dragState = null;
 };
 
-sb.addEventListener('pointerup', finishDrag, true);
-sb.addEventListener('pointercancel', finishDrag, true);
+b.addEventListener('pointerup', finishDrag, true);
+b.addEventListener('pointercancel', finishDrag, true);
 
-sb.addEventListener('click', (e) => {
+b.addEventListener('click', (e) => {
 e.preventDefault();
 e.stopPropagation();
 if (suppressTap) return;
-const res = d2edPullEnemiesToAnchor(D2ED_SHINRA_DIST, D2ED_SHINRA_ANGLE, false);
-if (!res.ready) {
-shinraTempText = '神羅天征 (未抓到)';
-} else if (res.lockedNow) {
-shinraTempText = `神羅天征 已鎖定 ${res.pulled}怪`;
-} else {
-shinraTempText = res.pulled ? `神羅天征 吸 ${res.pulled}怪` : '神羅天征 (無怪)';
-}
-d2edSyncShinraLabel();
-clearTimeout(shinraTempTimer);
-shinraTempTimer = setTimeout(() => {
-shinraTempText = '';
-d2edSyncShinraLabel();
-}, 1000);
-if (D2ED.panel) d2edRender();
+d2edTogglePanel();
 });
 
+// 定點按鈕：定點怪物座標（記住目前角色右邊 200 座標並吸怪）+ 連動大神系統狀態
 ab.addEventListener('click', (e) => {
 e.preventDefault();
 e.stopPropagation();
 const res = d2edPullEnemiesToAnchor(D2ED_SHINRA_DIST, D2ED_SHINRA_ANGLE, true);
 anchorTempText = !res.ready ? '未抓到' : `定點(${res.pulled})`;
-d2edSyncShinraLabel();
+d2edSyncLinkedState();
 clearTimeout(anchorTempTimer);
 anchorTempTimer = setTimeout(() => {
 anchorTempText = '';
-d2edSyncShinraLabel();
+d2edSyncAnchorLabel();
 }, 1000);
 if (D2ED.panel) d2edRender();
 });
 }
 
 function d2edPlaceButton() {
-const btns = [D2ED.button, D2ED.pullBtn, D2ED.anchorBtn, D2ED.shinraBtn].filter(Boolean);
+const btns = [D2ED.button, D2ED.anchorBtn].filter(Boolean);
 if (!btns.length) return;
 const hidden = !!D2ED.panel || !!D2EC.overlay || !!D2IE.overlay;
 for (const el of btns) el.style.display = hidden ? 'none' : 'block';
 if (!hidden) {
-const g = getShinraGroupRect();
-if (g) applyShinraGroupCoords(g.sLeft, g.sTop, g.aLeft, g.aTop);
-for (const el of [D2ED.button, D2ED.pullBtn]) {
-if (!el) continue;
-const r = el.getBoundingClientRect();
-const others = [D2ED.button, D2ED.pullBtn, D2ED.shinraBtn, D2ED.anchorBtn].filter(o => o && o !== el);
-const oRects = others.map(o => o.getBoundingClientRect()).filter(x => x.width > 0 && x.height > 0);
-if (r.width > 0 && r.height > 0 && overlapsAny(r, oRects, BTN_GAP)) {
-resolveNonOverlap(el, others);
-}
-}
-resolveNonOverlapForShinra([D2ED.button, D2ED.pullBtn]);
+const p = getLinkedPairRect();
+if (p) applyLinkedPairCoords(p.bLeft, p.bTop, p.aLeft, p.aTop);
 }
 requestAnimationFrame(d2edPlaceButton);
 }
@@ -2044,8 +1836,6 @@ pull: d2edPullEnemiesToAnchor,
 autoOn: d2edShinraAutoOn
 };
 d2edKeepLeaderboardOff();
-d2edPerfApplyDpr();
-setTimeout(d2edPerfApplyGame, 1500);
 
 const rawGet = WeakMap.prototype.get;
 WeakMap.prototype.get = function (key) {
@@ -2171,51 +1961,11 @@ background-image: linear-gradient(#2e2216 1px, transparent 1px), linear-gradient
 document.head.append(style);
 
 D2ED.button = d2edEl('button', { id: 'd2ed-btn', class: 'd2ed-top-btn', type: 'button' }, '大神系統');
-D2ED.pullBtn = d2edEl('button', { id: 'd2ed-pull-btn', class: 'd2ed-top-btn', type: 'button' }, '吞天');
-D2ED.anchorBtn = d2edEl('button', { id: 'd2ed-shinra-anchor-btn', class: 'd2ed-top-btn d2ed-anchor-btn', type: 'button', title: '記住目前角色右邊 200 距離的位置並吸怪' }, '定點');
-D2ED.shinraBtn = d2edEl('button', { id: 'd2ed-shinra-btn', class: 'd2ed-top-btn', type: 'button', title: '左鍵：吸往已鎖定座標｜右鍵：切換自動' }, '神羅天征');
-d2edSyncPullLabel();
-d2edSyncShinraLabel();
-document.body.append(D2ED.button, D2ED.pullBtn, D2ED.anchorBtn, D2ED.shinraBtn);
+D2ED.anchorBtn = d2edEl('button', { id: 'd2ed-shinra-anchor-btn', class: 'd2ed-top-btn d2ed-anchor-btn', type: 'button', title: '定點怪物座標（記住目前角色右邊 200 座標並吸怪）' }, '定點');
+d2edSyncLinkedState();
+document.body.append(D2ED.anchorBtn, D2ED.button);
 
-const allTopBtns = () => [D2ED.button, D2ED.pullBtn, D2ED.anchorBtn, D2ED.shinraBtn];
-
-attachDraggable(D2ED.button, D2ED_SYS_POS_KEY, allTopBtns, () => {
-d2edOpen();
-});
-
-attachDraggable(D2ED.pullBtn, D2ED_PULL_POS_KEY, allTopBtns, () => {
-const res = d2edPullItemsToPlayer();
-pullTempText = res.total ? `吞天 ${res.items}物/${res.chests}箱` : '吞天 (無)';
-d2edSyncPullLabel();
-clearTimeout(pullTempTimer);
-pullTempTimer = setTimeout(() => {
-pullTempText = '';
-d2edSyncPullLabel();
-}, 1000);
-});
-
-D2ED.pullBtn.addEventListener('contextmenu', (e) => {
-e.preventDefault();
-e.stopPropagation();
-const next = !d2edEndPullOn();
-try { localStorage.setItem(D2ED_ENDPULL_KEY, next ? '1' : '0'); } catch (_) {}
-pullTempText = '';
-d2edSyncPullLabel();
-if (D2ED.panel) d2edRender();
-});
-
-attachShinraPairDraggable(allTopBtns);
-
-D2ED.shinraBtn.addEventListener('contextmenu', (e) => {
-e.preventDefault();
-e.stopPropagation();
-const next = !d2edShinraAutoOn();
-try { localStorage.setItem(D2ED_SHINRA_AUTO_KEY, next ? '1' : '0'); } catch (_) {}
-shinraTempText = '';
-d2edSyncShinraLabel();
-if (D2ED.panel) d2edRender();
-});
+attachLinkedPairDraggable();
 
 for (const type of ['mousedown', 'mouseup', 'touchstart', 'touchend']) {
 window.addEventListener(type, e => {
