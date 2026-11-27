@@ -32,7 +32,11 @@
     ['shape shifting skills', '變形技能'],
     ['elemental skills', '元素法術技能'],
     ['javelin and spear skills', '標槍與長矛技能'],
+    ['lightning strike', '閃電強擊'],
+    ['lightning fury', '閃電烈怒'],
     ['lightning bolt', '閃電槍'],
+    ['fire skills', '火焰技能'],
+    ['inferno', '煉獄之火'],
     ['druid skills', '德魯伊技能'],
     ['werebear', '熊人變化'],
     ['lycanthropy', '變形術'],
@@ -47,6 +51,53 @@
   ];
 
   const V0_RULES = [
+    [/^(?:等級\s*)?(\d+)\s+Weaken\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 削弱 (${m[2]} 次)` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Volcano\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 火山噴發 (${m[2]} 次)` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Critical\s+Strike$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 致命一擊` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Meditation\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 冥想靈氣` : null
+    ],
+    [/^([+-]?\d+(?:\.\d+)?)\s+Lightning\s+Absorb$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 電擊吸收` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Fire\s+Skills$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 火焰技能` : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*火焰風暴$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 火焰風暴`
+          : null
+    ],
+    [
+      /^Maiden\s+when\s+struck\s*\((\d+s\s*cooldown)\)\s*.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*生鐵$/i,
+      (m) => {
+        if (!hasNum(m[1]) || !hasNum(m[2]) || !hasNum(m[3])) return null;
+        const cd = String(m[1]).replace(/^(\d+)s\s*cooldown$/i, '冷卻時間$1秒');
+        return `被擊中時有 ${m[2]}% 機率施展等級 ${m[3]} 攻擊反噬 (${cd})`;
+      }
+    ],
+    [
+      /^of\s+the\s+Heavens\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*拳頭$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 天堂之拳`
+          : null
+    ],
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*隕石術$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 隕石術`
+          : null
+    ],
     [/^\+?(\d+(?:\.\d+)?)\s+to\s+Maximum\s+Damage$/i, (m) =>
       hasNum(m[1]) ? `${fmtSign(m[1])} 最大傷害` : null
     ],
@@ -400,7 +451,11 @@
     ['shape shifting skills', '變形技能'],
     ['elemental skills', '元素法術技能'],
     ['javelin and spear skills', '標槍與長矛技能'],
+    ['lightning strike', '閃電強擊'],
+    ['lightning fury', '閃電烈怒'],
     ['lightning bolt', '閃電槍'],
+    ['fire skills', '火焰技能'],
+    ['inferno', '煉獄之火'],
     ['druid skills', '德魯伊技能'],
     ['warcries', '戰吼'],
     ['freezes target', '凍結目標'],
@@ -419,6 +474,7 @@
     ['maximum damage', '最大傷害'],
     ['extra gold from monsters', '怪物金幣掉落量提高'],
     ['fire absorb', '火焰吸收'],
+    ['lightning absorb', '電擊吸收'],
     ['fire resist', '火焰抗性'],
     ['lightning resist', '電擊抗性'],
     ['cold resist', '冰寒抗性'],
@@ -541,7 +597,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.9',
+    version: 'v0.10',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
