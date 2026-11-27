@@ -32,6 +32,10 @@
     ['shape shifting skills', '變形技能'],
     ['elemental skills', '元素法術技能'],
     ['javelin and spear skills', '標槍與長矛技能'],
+    ['passive and magic skills', '被動與魔法'],
+    ['martial arts', '武學技藝'],
+    ['wake of fire', '焰痕衛哨'],
+    ['shadow disciplines', '暗影修行'],
     ['lightning strike', '閃電強擊'],
     ['lightning fury', '閃電烈怒'],
     ['lightning bolt', '閃電槍'],
@@ -47,10 +51,82 @@
     ['battle command', '戰鬥指揮'],
     ['battle orders', '戰鬥命令'],
     ['battle cry', '戰吼'],
-    ['warcries', '戰吼']
+    ['warcries', '戰吼'],
+    ['leap', '跳躍'],
+    ['revive', '重生']
   ];
 
   const V0_RULES = [
+    [
+      /^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Assassin Only|只限刺客)\)$/i,
+      (m) => {
+        if (!hasNum(m[1])) return null;
+        const name = String(m[2] || '').trim().toLowerCase();
+        const found = V0_SKILLS.find(([en]) => name.includes(en));
+        return found ? `${fmtSign(m[1])} 至${found[1]} (只限刺客)` : null;
+      }
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Sorceress\s+Skill\s+Levels$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 魔法使技能等級` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Holy\s+Shock\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 神聖電擊靈氣` : null
+    ],
+    [/^Damage\s*([+-]?\d+(?:\.\d+)?)$/i, (m) =>
+      hasNum(m[1]) ? `傷害 ${fmtSign(m[1])}` : null
+    ],
+    [
+      /^([+-]?\d+(?:\.\d+)?)\s*%\s*Damage\s+to\s+Demons\s*\(Based\s+on\s+Character\s+Level\)$/i,
+      (m) =>
+        hasNum(m[1]) ? `${fmtSign(m[1])}% 對惡魔的傷害 (依角色等級而定)` : null
+    ],
+    [
+      /^([+-]?\d+(?:\.\d+)?)\s+Defense\s*\(Based\s+on\s+Character\s+Level\)$/i,
+      (m) =>
+        hasNum(m[1]) ? `${fmtSign(m[1])} 防禦 (依角色等級而定)` : null
+    ],
+    [
+      /^Nova\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*毒素$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 劇毒新星`
+          : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*衰老$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 衰老`
+          : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*混亂$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 混亂`
+          : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*削弱$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 削弱`
+          : null
+    ],
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*混亂$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 混亂`
+          : null
+    ],
+    [
+      /^Spike\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*冰河$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 冰川之槍`
+          : null
+    ],
     [/^(?:等級\s*)?(\d+)\s+Weaken\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
       hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 削弱 (${m[2]} 次)` : null
     ],
@@ -451,6 +527,10 @@
     ['shape shifting skills', '變形技能'],
     ['elemental skills', '元素法術技能'],
     ['javelin and spear skills', '標槍與長矛技能'],
+    ['passive and magic skills', '被動與魔法'],
+    ['martial arts', '武學技藝'],
+    ['wake of fire', '焰痕衛哨'],
+    ['shadow disciplines', '暗影修行'],
     ['lightning strike', '閃電強擊'],
     ['lightning fury', '閃電烈怒'],
     ['lightning bolt', '閃電槍'],
@@ -458,6 +538,8 @@
     ['inferno', '煉獄之火'],
     ['druid skills', '德魯伊技能'],
     ['warcries', '戰吼'],
+    ['leap', '跳躍'],
+    ['revive', '重生'],
     ['freezes target', '凍結目標'],
     ['immolation arrow', '熾炎箭'],
     ['poison length reduced', '中毒時效縮短'],
@@ -597,7 +679,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.10',
+    version: 'v0.11',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
