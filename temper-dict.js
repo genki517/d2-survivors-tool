@@ -27,6 +27,7 @@
     ['bone spirit', '骸骨之魂'],
     ['bone wall', '骨牆'],
     ['skeleton mastery', '骷髏專精'],
+    ['chilling armor', '寒冰甲'],
     ['curses', '詛咒'],
     ['defensive auras', '防禦靈氣'],
     ['offensive auras', '攻擊靈氣'],
@@ -36,6 +37,23 @@
   ];
 
   const V0_RULES = [
+    [/^\+?(\d+(?:\.\d+)?)\s+Defense\s+vs\.\s+Missile$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 對遠程防禦` : null
+    ],
+    [
+      /^Spike\s+on\s+attack\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*冰河$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `攻擊時有 ${m[1]}% 機率施展等級 ${m[2]} 冰川之槍`
+          : null
+    ],
+    [
+      /^Lightning\s+when\s+you\s+Die\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*連鎖閃電$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `當你死亡時有 ${m[1]}% 機率施展等級 ${m[2]} 連鎖閃電`
+          : null
+    ],
     [/^\+?(\d+(?:\.\d+)?)\s*%\s*Enhanced Defense$/i, (m) =>
       hasNum(m[1]) ? `增強防禦 ${fmtSign(m[1])}%` : null
     ],
@@ -68,6 +86,18 @@
         hasNum(m[1]) && hasNum(m[2])
           ? `${fmtSign(m[1])} 最小毒素傷害，${fmtSign(m[2])} 最大毒素傷害`
           : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s*%\s*to\s+(Fire|Lightning|Cold|Poison)\s+Skill\s+Damage$/i, (m) => {
+      if (!hasNum(m[1])) return null;
+      const elMap = { fire: '火焰', lightning: '電擊', cold: '冰寒', poison: '毒素' };
+      const zhEl = elMap[String(m[2] || '').toLowerCase()] || m[2];
+      return `${fmtSign(m[1])}% ${zhEl}技能傷害`;
+    }],
+    [/^(\d+(?:\.\d+)?)\s*%\s*Deadly\s+Strike\s*\(Based\s+on\s+Character\s+Level\)$/i, (m) =>
+      hasNum(m[1]) ? `${m[1]}% 致命打擊 (依角色等級而定)` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Blood Golem\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 鮮血魔像 (${m[2]} 次)` : null
     ],
     [/^(?:等級\s*)?(\d+)\s+Bone Prison\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
       hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 骨牢 (${m[2]} 次)` : null
@@ -104,6 +134,12 @@
       const found = V0_SKILLS.find(([en]) => name.includes(en));
       return found ? `${fmtSign(m[1])} 至${found[1]} (只限聖騎士)` : null;
     }],
+    [/^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Sorcerer Only|Sorceress Only|只限魔法使)\)$/i, (m) => {
+      if (!hasNum(m[1])) return null;
+      const name = String(m[2] || '').trim().toLowerCase();
+      const found = V0_SKILLS.find(([en]) => name.includes(en));
+      return found ? `${fmtSign(m[1])} 至${found[1]} (只限魔法使)` : null;
+    }],
     [/^([+-]?\d+(?:\.\d+)?)\s+to\s+(Battle Command|Battle Orders|Battle Cry)$/i, (m) => {
       if (!hasNum(m[1])) return null;
       const name = String(m[2] || '').trim().toLowerCase();
@@ -134,6 +170,9 @@
     [/^Adds\s+(\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?)\s+cold damage$/i, (m) =>
       hasNum(m[1]) ? `附加 ${m[1].replace(/\s+/g, '')} 冰寒傷害` : null
     ],
+    [/^([+-]?\d+(?:\.\d+)?)\s+magic\s+damage$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 魔法傷害` : null
+    ],
     [/^\+?(\d+(?:\.\d+)?)\s*%\s*Faster Cast Rate$/i, (m) =>
       hasNum(m[1]) ? `${fmtSign(m[1])}% 施法速度` : null
     ],
@@ -163,6 +202,10 @@
     ['lightning resist', '電擊抗性'],
     ['cold resist', '冰寒抗性'],
     ['poison resist', '毒素抗性'],
+    ['fire skill damage', '火焰技能傷害'],
+    ['lightning skill damage', '電擊技能傷害'],
+    ['cold skill damage', '冰寒技能傷害'],
+    ['poison skill damage', '毒素技能傷害'],
     ['all resistances', '所有抗性'],
     ['strength', '力量'],
     ['dexterity', '敏捷'],
@@ -171,13 +214,17 @@
     ['all attributes', '所有屬性'],
     ['enhanced damage', '傷害強化'],
     ['enhanced defense', '增強防禦'],
+    ['defense vs. missile', '對遠程防禦'],
     ['attack rating', '攻擊準確率'],
     ['faster cast rate', '施法速度'],
     ['faster block rate', '格擋速度'],
     ['crushing blow', '粉碎打擊機率'],
+    ['deadly strike', '致命打擊'],
+    ['blood golem', '鮮血魔像'],
     ['monster to flee', '擊中使怪物逃跑'],
     ['minimum poison damage', '最小毒素傷害'],
     ['maximum poison damage', '最大毒素傷害'],
+    ['magic damage', '魔法傷害'],
     ['lightning damage', '電擊傷害'],
     ['cold damage', '冰寒傷害'],
     ['fire damage', '火焰傷害'],
@@ -273,7 +320,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0',
+    version: 'v0.3',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
