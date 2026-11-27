@@ -29,6 +29,10 @@
     ['skeleton mastery', '骷髏專精'],
     ['poison and bone skills', '毒素與骸骨技能'],
     ['combat skills', '戰鬥技能'],
+    ['shape shifting skills', '變形技能'],
+    ['elemental skills', '元素法術技能'],
+    ['javelin and spear skills', '標槍與長矛技能'],
+    ['lightning bolt', '閃電槍'],
     ['druid skills', '德魯伊技能'],
     ['werebear', '熊人變化'],
     ['lycanthropy', '變形術'],
@@ -38,10 +42,52 @@
     ['offensive auras', '攻擊靈氣'],
     ['battle command', '戰鬥指揮'],
     ['battle orders', '戰鬥命令'],
-    ['battle cry', '戰吼']
+    ['battle cry', '戰吼'],
+    ['warcries', '戰吼']
   ];
 
   const V0_RULES = [
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Maximum\s+Damage$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 最大傷害` : null
+    ],
+    [/^Adds\s+(\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?)\s+damage$/i, (m) =>
+      hasNum(m[1]) ? `附加 ${m[1].replace(/\s+/g, '')} 傷害` : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*嘲諷$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 嘲諷`
+          : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*閃電$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 閃電`
+          : null
+    ],
+    [
+      /^Nova\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*Frost$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 冰霜新星`
+          : null
+    ],
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*閃電新星$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 閃電新星`
+          : null
+    ],
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*多頭蛇$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 多頭蛇`
+          : null
+    ],
     [/^\+?(\d+(?:\.\d+)?)\s+to\s+Barbarian\s+Skill\s+Levels$/i, (m) =>
       hasNum(m[1]) ? `${fmtSign(m[1])} 野蠻人技能等級` : null
     ],
@@ -52,6 +98,24 @@
         const name = String(m[2] || '').trim().toLowerCase();
         const found = V0_SKILLS.find(([en]) => name.includes(en));
         return found ? `${fmtSign(m[1])} 至${found[1]} (只限野蠻人)` : null;
+      }
+    ],
+    [
+      /^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Druid Only|只限德魯伊)\)$/i,
+      (m) => {
+        if (!hasNum(m[1])) return null;
+        const name = String(m[2] || '').trim().toLowerCase();
+        const found = V0_SKILLS.find(([en]) => name.includes(en));
+        return found ? `${fmtSign(m[1])} 至${found[1]} (只限德魯伊)` : null;
+      }
+    ],
+    [
+      /^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Amazon Only|只限亞馬遜)\)$/i,
+      (m) => {
+        if (!hasNum(m[1])) return null;
+        const name = String(m[2] || '').trim().toLowerCase();
+        const found = V0_SKILLS.find(([en]) => name.includes(en));
+        return found ? `${fmtSign(m[1])} 至${found[1]} (只限亞馬遜)` : null;
       }
     ],
     [
@@ -333,7 +397,12 @@
     ['all skills', '所有技能'],
     ['poison and bone skills', '毒素與骸骨技能'],
     ['combat skills', '戰鬥技能'],
+    ['shape shifting skills', '變形技能'],
+    ['elemental skills', '元素法術技能'],
+    ['javelin and spear skills', '標槍與長矛技能'],
+    ['lightning bolt', '閃電槍'],
     ['druid skills', '德魯伊技能'],
+    ['warcries', '戰吼'],
     ['freezes target', '凍結目標'],
     ['immolation arrow', '熾炎箭'],
     ['poison length reduced', '中毒時效縮短'],
@@ -347,6 +416,7 @@
     ['open wounds', '開放傷口機率'],
     ['blinds target', '擊中使目標目盲'],
     ['minimum damage', '最小傷害'],
+    ['maximum damage', '最大傷害'],
     ['extra gold from monsters', '怪物金幣掉落量提高'],
     ['fire absorb', '火焰吸收'],
     ['fire resist', '火焰抗性'],
@@ -471,7 +541,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.8',
+    version: 'v0.9',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
