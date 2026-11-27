@@ -40,6 +40,22 @@
   ];
 
   const V0_RULES = [
+    [/^(?:等級\s*)?(\d+)\s+Thorns\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 荊棘靈氣` : null
+    ],
+    [/^Reduces\s+all\s+Vendor\s+Prices\s*(\d+(?:\.\d+)?)\s*%?$/i, (m) =>
+      hasNum(m[1]) ? `所有商人的價格降低 ${m[1]}%` : null
+    ],
+    [
+      /^(\d+(?:\.\d+)?)\s*%\s*Better\s+Chance\s+of\s+Getting\s+Magic\s+Items\s*\(Based\s+on\s+Character\s+Level\)$/i,
+      (m) =>
+        hasNum(m[1])
+          ? `尋獲魔法物品機率提高 ${m[1]}% (依角色等級而定)`
+          : null
+    ],
+    [/^Attacker\s+Takes\s+Damage\s+of\s*(\d+(?:\.\d+)?)$/i, (m) =>
+      hasNum(m[1]) ? `攻擊者反傷 ${m[1]}` : null
+    ],
     [/^Hit\s+Blinds\s+Target$/i, () => '擊中使目標目盲'],
     [/^\+?(\d+(?:\.\d+)?)\s+to\s+Minimum\s+Damage$/i, (m) =>
       hasNum(m[1]) ? `${fmtSign(m[1])} 最小傷害` : null
@@ -227,6 +243,9 @@
     ['werebear', '熊人變化'],
     ['lycanthropy', '變形術'],
     ['fanaticism', '狂熱靈氣'],
+    ['thorns', '荊棘靈氣'],
+    ['vendor prices', '所有商人的價格降低'],
+    ['attacker takes damage', '攻擊者反傷'],
     ['summon grizzly', '召喚灰熊'],
     ['open wounds', '開放傷口機率'],
     ['blinds target', '擊中使目標目盲'],
@@ -355,7 +374,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.4',
+    version: 'v0.5',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
