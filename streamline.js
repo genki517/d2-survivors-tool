@@ -4,6 +4,7 @@ window.__D2MOD_V6_LOADED = true;
 
 const D2ZH_VERSION = 'V6大神精簡版';
 window.__D2ZH_VERSION = D2ZH_VERSION;
+const D2ED_TEMPER_DICT_URL = 'https://raw.githubusercontent.com/genki517/d2-survivors-tool/refs/heads/main/temper-dict.js';
 const UI_FONT = '"Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", sans-serif';
 const D2ED = {
 player: null, extras: null, world: null, build: null,
@@ -1820,11 +1821,29 @@ if (p) applyLinkedPairCoords(p.bLeft, p.bTop, p.aLeft, p.aTop);
 requestAnimationFrame(d2edPlaceButton);
 }
 
+async function d2edLoadTemperDict(dictUrl = D2ED_TEMPER_DICT_URL) {
+const url = String(dictUrl || '').trim();
+if (!/^https?:\/\//i.test(url)) return false;
+const target = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+try {
+const res = await fetch(target, { cache: 'no-store' });
+if (!res.ok) throw new Error('HTTP ' + res.status);
+const code = await res.text();
+new Function(code)();
+console.log('[大神系統] temper-dict.js 已載入');
+return true;
+} catch (err) {
+console.warn('[大神系統] temper-dict.js 載入失敗：', err);
+return false;
+}
+}
+
 function d2edInstall() {
 window.__D2ED = D2ED;
 d2edBuildInstall();
 d2ecWorldInstall();
 d2gameInstall();
+d2edLoadTemperDict();
 D2ED.forge = { game: D2GAME, show: d2ieShow, entries: d2ieEntries, select: d2ieSelect, lines: d2ieAnvilLines };
 D2ED.shinra = {
 version: D2ED_SHINRA_VER,
