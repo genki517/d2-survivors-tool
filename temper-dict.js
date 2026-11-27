@@ -29,6 +29,7 @@
     ['skeleton mastery', '骷髏專精'],
     ['curses', '詛咒'],
     ['defensive auras', '防禦靈氣'],
+    ['offensive auras', '攻擊靈氣'],
     ['battle command', '戰鬥指揮'],
     ['battle orders', '戰鬥命令'],
     ['battle cry', '戰吼']
@@ -51,6 +52,22 @@
     }],
     [/^(\d+(?:\.\d+)?)\s*%\s*Increased Chance of Blocking$/i, (m) =>
       hasNum(m[1]) ? `${m[1]}% 格擋機率提高` : null
+    ],
+    [/^([+-]?\d+(?:\.\d+)?)\s*%\s*Faster Block Rate$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])}% 格擋速度` : null
+    ],
+    [/^(\d+(?:\.\d+)?)\s*%\s*Chance of Crushing Blow$/i, (m) =>
+      hasNum(m[1]) ? `${m[1]}% 粉碎打擊機率` : null
+    ],
+    [/^Hit Causes Monster to Flee\s*(\d+(?:\.\d+)?)\s*%?$/i, (m) =>
+      hasNum(m[1]) ? `擊中使怪物逃跑 ${m[1]}%` : null
+    ],
+    [
+      /^\+?(\d+(?:\.\d+)?)\s+to\s+Minimum\s+Poison\s+Damage\s*,\s*\+?(\d+(?:\.\d+)?)\s+to\s+Maximum\s+Poison\s+Damage$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `${fmtSign(m[1])} 最小毒素傷害，${fmtSign(m[2])} 最大毒素傷害`
+          : null
     ],
     [/^(?:等級\s*)?(\d+)\s+Bone Prison\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
       hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 骨牢 (${m[2]} 次)` : null
@@ -111,6 +128,12 @@
     [/^Adds\s+(\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?)\s+fire damage$/i, (m) =>
       hasNum(m[1]) ? `附加 ${m[1].replace(/\s+/g, '')} 火焰傷害` : null
     ],
+    [/^Adds\s+(\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?)\s+lightning damage$/i, (m) =>
+      hasNum(m[1]) ? `附加 ${m[1].replace(/\s+/g, '')} 電擊傷害` : null
+    ],
+    [/^Adds\s+(\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?)\s+cold damage$/i, (m) =>
+      hasNum(m[1]) ? `附加 ${m[1].replace(/\s+/g, '')} 冰寒傷害` : null
+    ],
     [/^\+?(\d+(?:\.\d+)?)\s*%\s*Faster Cast Rate$/i, (m) =>
       hasNum(m[1]) ? `${fmtSign(m[1])}% 施法速度` : null
     ],
@@ -150,6 +173,14 @@
     ['enhanced defense', '增強防禦'],
     ['attack rating', '攻擊準確率'],
     ['faster cast rate', '施法速度'],
+    ['faster block rate', '格擋速度'],
+    ['crushing blow', '粉碎打擊機率'],
+    ['monster to flee', '擊中使怪物逃跑'],
+    ['minimum poison damage', '最小毒素傷害'],
+    ['maximum poison damage', '最大毒素傷害'],
+    ['lightning damage', '電擊傷害'],
+    ['cold damage', '冰寒傷害'],
+    ['fire damage', '火焰傷害'],
     ['faster hit recovery', '加快失衡恢復'],
     ['faster run/walk', '跑步/行走速度'],
     ['magic find', '尋獲魔法物品機率'],
