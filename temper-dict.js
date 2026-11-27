@@ -40,6 +40,30 @@
   ];
 
   const V0_RULES = [
+    [
+      /^Bolt\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*神聖$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 聖光彈`
+          : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Paladin\s+Skill\s+Levels$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 聖騎士技能等級` : null
+    ],
+    [
+      /^Lightning\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*連鎖$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 連鎖閃電`
+          : null
+    ],
+    [
+      /^Bolt\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*電荷$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 電能彈`
+          : null
+    ],
     [/^(?:等級\s*)?(\d+)\s+Thorns\s+Aura\s+When\s+Equipped$/i, (m) =>
       hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 荊棘靈氣` : null
     ],
@@ -374,7 +398,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.5',
+    version: 'v0.6',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
