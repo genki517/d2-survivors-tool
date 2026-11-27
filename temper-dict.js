@@ -27,6 +27,9 @@
     ['bone spirit', '骸骨之魂'],
     ['bone wall', '骨牆'],
     ['skeleton mastery', '骷髏專精'],
+    ['poison and bone skills', '毒素與骸骨技能'],
+    ['werebear', '熊人變化'],
+    ['lycanthropy', '變形術'],
     ['chilling armor', '寒冰甲'],
     ['curses', '詛咒'],
     ['defensive auras', '防禦靈氣'],
@@ -37,6 +40,28 @@
   ];
 
   const V0_RULES = [
+    [/^Hit\s+Blinds\s+Target$/i, () => '擊中使目標目盲'],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Minimum\s+Damage$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 最小傷害` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Fanaticism\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 狂熱靈氣` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Summon\s+Grizzly\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 召喚灰熊 (${m[2]} 次)` : null
+    ],
+    [/^(\d+(?:\.\d+)?)\s*%\s*Chance\s+of\s+Open\s+Wounds$/i, (m) =>
+      hasNum(m[1]) ? `${m[1]}% 開放傷口機率` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+Heal\s+Stamina\s+Plus\s*\(Based\s+on\s+Character\s+Level\)$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 精力恢復 (依角色等級而定)` : null
+    ],
+    [/^(\d+(?:\.\d+)?)\s*%\s*Extra\s+Gold\s+from\s+Monsters$/i, (m) =>
+      hasNum(m[1]) ? `怪物金幣掉落量提高 ${m[1]}%` : null
+    ],
+    [/^Fire\s+Absorb\s*(\d+(?:\.\d+)?)\s*%?$/i, (m) =>
+      hasNum(m[1]) ? `火焰吸收 ${m[1]}%` : null
+    ],
     [/^\+?(\d+(?:\.\d+)?)\s+Defense\s+vs\.\s+Missile$/i, (m) =>
       hasNum(m[1]) ? `${fmtSign(m[1])} 對遠程防禦` : null
     ],
@@ -140,7 +165,7 @@
       const found = V0_SKILLS.find(([en]) => name.includes(en));
       return found ? `${fmtSign(m[1])} 至${found[1]} (只限魔法使)` : null;
     }],
-    [/^([+-]?\d+(?:\.\d+)?)\s+to\s+(Battle Command|Battle Orders|Battle Cry)$/i, (m) => {
+    [/^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)$/i, (m) => {
       if (!hasNum(m[1])) return null;
       const name = String(m[2] || '').trim().toLowerCase();
       const found = V0_SKILLS.find(([en]) => name.includes(en));
@@ -198,6 +223,16 @@
 
   const V0_PHRASES = [
     ['all skills', '所有技能'],
+    ['poison and bone skills', '毒素與骸骨技能'],
+    ['werebear', '熊人變化'],
+    ['lycanthropy', '變形術'],
+    ['fanaticism', '狂熱靈氣'],
+    ['summon grizzly', '召喚灰熊'],
+    ['open wounds', '開放傷口機率'],
+    ['blinds target', '擊中使目標目盲'],
+    ['minimum damage', '最小傷害'],
+    ['extra gold from monsters', '怪物金幣掉落量提高'],
+    ['fire absorb', '火焰吸收'],
     ['fire resist', '火焰抗性'],
     ['lightning resist', '電擊抗性'],
     ['cold resist', '冰寒抗性'],
@@ -320,7 +355,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.3',
+    version: 'v0.4',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
