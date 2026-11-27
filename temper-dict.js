@@ -28,6 +28,7 @@
     ['bone wall', '骨牆'],
     ['skeleton mastery', '骷髏專精'],
     ['poison and bone skills', '毒素與骸骨技能'],
+    ['druid skills', '德魯伊技能'],
     ['werebear', '熊人變化'],
     ['lycanthropy', '變形術'],
     ['chilling armor', '寒冰甲'],
@@ -40,6 +41,36 @@
   ];
 
   const V0_RULES = [
+    [/^Poison\s+Length\s+Reduced\s+by\s*(\d+(?:\.\d+)?)\s*%?$/i, (m) =>
+      hasNum(m[1]) ? `中毒時效縮短 ${m[1]}%` : null
+    ],
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*削弱$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 削弱`
+          : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*旋風術$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 旋風術`
+          : null
+    ],
+    [
+      /^Armor\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*颶風$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 氣旋護甲`
+          : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Druid\s+Skills$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 德魯伊技能` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Immolation Arrow\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 熾炎箭 (${m[2]} 次)` : null
+    ],
     [
       /^Bolt\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*神聖$/i,
       (m) =>
@@ -264,6 +295,9 @@
   const V0_PHRASES = [
     ['all skills', '所有技能'],
     ['poison and bone skills', '毒素與骸骨技能'],
+    ['druid skills', '德魯伊技能'],
+    ['immolation arrow', '熾炎箭'],
+    ['poison length reduced', '中毒時效縮短'],
     ['werebear', '熊人變化'],
     ['lycanthropy', '變形術'],
     ['fanaticism', '狂熱靈氣'],
@@ -398,7 +432,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.6',
+    version: 'v0.7',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
