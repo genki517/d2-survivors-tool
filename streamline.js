@@ -794,14 +794,8 @@ const f = D2EC.api && D2EC.api.anvilLines;
 if (!f) return null;
 try { return f(item, 0, d2ieLevel(), 1).lines || []; } catch (_) { return null; }
 }
-function d2ieTemperCap(item, lines) {
-let cap = null;
-try { const v = D2EC.api.anvilLines(item, 0, d2ieLevel(), 1); if (v && typeof v.cap === 'number') cap = v.cap; } catch (_) {}
-if (cap === null) {
-cap = Math.min(D2IE_TEMPER_MAX, 2 * (lines || []).filter(l => l.key).reduce((a, l) => a + (l.rolls || 1), 0))
-* (item.forge && item.forge.hf ? 2 : 1);
-}
-return cap;
+function d2ieTemperCap(item) {
+return item.forge && item.forge.hf ? D2IE_TEMPER_MAX * 2 : D2IE_TEMPER_MAX;
 }
 function d2ieModName(stat) {
 return stat;
@@ -909,7 +903,7 @@ if (!lines) { out.push(d2edEl('p', { class: 'd2ec-fixed' }, '讀不到鐵砧的�
 const rows = lines.filter(l => l.key);
 if (!rows.length) { out.push(d2edEl('p', { class: 'd2ec-fixed' }, '這件裝備沒有可以強化的能力。')); return out; }
 const held = (item.forge && item.forge.t) || {};
-const cap = d2ieTemperCap(item, rows);
+const cap = d2ieTemperCap(item);
 const reads = [];
 const total = d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' });
 const showTotal = () => {
@@ -918,7 +912,7 @@ total.textContent = `合計 ${sum} / ${cap} 次`;
 total.style.color = sum > cap ? '#ff8a7a' : '';
 };
 for (const l of rows) {
-const row = d2ecNumberRow(v => `${l.text}（強化 ${held[l.key] || 0} 次）`, 0, cap, Math.min(cap, held[l.key] || 0), read => reads.push([l.key, read]));
+const row = d2ecNumberRow(v => `${l.text}（強化 ${v} 次）`, 0, cap, Math.min(cap, held[l.key] || 0), read => reads.push([l.key, read]));
 row.querySelector('input').addEventListener('input', showTotal);
 out.push(row);
 }
@@ -938,8 +932,7 @@ if (!ok) { d2ieMsg('找不到遊戲資料，沒有套用', true); return; }
 d2ieSelect(item);
 d2ieMsg(clear ? '已清除所有強化' : '已套用強化');
 };
-out.push(d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, `數量型能力每強化一次 +40%（至少 +1），技能等級每次 +1 級。這件最多 ${cap} 次（每一行 2 次、最多 10 次${item.forge && item.forge.hf ? '，經過地獄熔爐加倍' : ''}），跟恰西鐵砧的上限一樣。`),
-d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, '用這裡改過強化的裝備，之後再放上恰西的鐵砧時，遊戲會改回鐵砧伺服器上的紀錄。'),
+out.push(d2edEl('p', { class: 'd2ec-range', style: 'margin: 4px 0' }, cap > D2IE_TEMPER_MAX ? '數量型能力每強化一次 +20%（至少 +1），技能等級每次 +1 級。這件經過地獄熔爐加倍，上限是 20 次。' : '數量型能力每強化一次 +20%（至少 +1），技能等級每次 +1 級。每件最多 10 次，跟恰西擴鑽一樣。'),
 d2edEl('div', { class: 'd2ed-row', style: 'margin: 6px 0' },
 d2edEl('button', { type: 'button', class: 'd2ec-ok', onclick: () => apply(false) }, '套用強化'),
 d2edEl('button', { type: 'button', onclick: () => apply(true) }, '全部清除')));
