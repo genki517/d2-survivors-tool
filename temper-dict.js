@@ -31,6 +31,7 @@
     ['lightning mastery', '閃電專精'],
     ['cold mastery', '冰寒專精'],
     ['masteries', '專精'],
+    ['summoning skills', '召喚法術技能'],
     ['raven', '掠鴉'],
     ['find potion', '尋找藥水'],
     ['find item', '尋找物品'],
@@ -67,6 +68,18 @@
   ];
 
   const V0_RULES = [
+    [/^(?:等級\s*)?(\d+)\s+Resist\s+Fire\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 抗火靈氣` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Sanctuary\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 庇護靈氣` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Assassin\s+Skills$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 刺客技能` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Amazon\s+Skill\s+Levels$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 亞馬遜技能等級` : null
+    ],
     [/^(?:等級\s*)?(\d+)\s+Plague\s+Javelin\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
       hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 瘟疫標槍 (${m[2]} 次)` : null
     ],
@@ -617,6 +630,7 @@
     ['elemental skills', '元素法術技能'],
     ['javelin and spear skills', '標槍與長矛技能'],
     ['passive and magic skills', '被動與魔法'],
+    ['summoning skills', '召喚法術技能'],
     ['martial arts', '武學技藝'],
     ['wake of fire', '焰痕衛哨'],
     ['shadow disciplines', '暗影修行'],
@@ -780,7 +794,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.13',
+    version: 'v0.14',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
