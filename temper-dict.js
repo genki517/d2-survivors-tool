@@ -27,6 +27,7 @@
     ['bone spirit', '骸骨之魂'],
     ['bone wall', '骨牆'],
     ['skeleton mastery', '骷髏專精'],
+    ['masteries', '專精'],
     ['poison and bone skills', '毒素與骸骨技能'],
     ['combat skills', '戰鬥技能'],
     ['shape shifting skills', '變形技能'],
@@ -41,6 +42,8 @@
     ['lightning bolt', '閃電槍'],
     ['fire skills', '火焰技能'],
     ['inferno', '煉獄之火'],
+    ['warmth', '暖流'],
+    ['valkyrie', '女武神'],
     ['druid skills', '德魯伊技能'],
     ['werebear', '熊人變化'],
     ['lycanthropy', '變形術'],
@@ -57,6 +60,67 @@
   ];
 
   const V0_RULES = [
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*暴風雪$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 暴風雪`
+          : null
+    ],
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*龍捲風$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 龍捲風`
+          : null
+    ],
+    [
+      /^Damage\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*Amplify$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 傷害加深`
+          : null
+    ],
+    [
+      /^Ball\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*火焰$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 火球術`
+          : null
+    ],
+    [
+      /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*熾烈之徑$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 熾烈之徑`
+          : null
+    ],
+    [
+      /^Tap\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*生命$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 偷取生命`
+          : null
+    ],
+    [
+      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*衰老$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 衰老`
+          : null
+    ],
+    [/^Cold\s+Absorb\s*(\d+(?:\.\d+)?)\s*%?$/i, (m) =>
+      hasNum(m[1]) ? `冰寒吸收 ${m[1]}%` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Vigor\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 活力靈氣` : null
+    ],
+    [/^([+-]?\d+(?:\.\d+)?)\s+damage$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 傷害` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+Defense\s+vs\.\s+Melee$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 對近戰防禦` : null
+    ],
     [
       /^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Assassin Only|只限刺客)\)$/i,
       (m) => {
@@ -90,13 +154,6 @@
       (m) =>
         hasNum(m[1]) && hasNum(m[2])
           ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 劇毒新星`
-          : null
-    ],
-    [
-      /^on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*衰老$/i,
-      (m) =>
-        hasNum(m[1]) && hasNum(m[2])
-          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 衰老`
           : null
     ],
     [
@@ -531,11 +588,14 @@
     ['martial arts', '武學技藝'],
     ['wake of fire', '焰痕衛哨'],
     ['shadow disciplines', '暗影修行'],
+    ['masteries', '專精'],
     ['lightning strike', '閃電強擊'],
     ['lightning fury', '閃電烈怒'],
     ['lightning bolt', '閃電槍'],
     ['fire skills', '火焰技能'],
     ['inferno', '煉獄之火'],
+    ['warmth', '暖流'],
+    ['valkyrie', '女武神'],
     ['druid skills', '德魯伊技能'],
     ['warcries', '戰吼'],
     ['leap', '跳躍'],
@@ -557,6 +617,7 @@
     ['extra gold from monsters', '怪物金幣掉落量提高'],
     ['fire absorb', '火焰吸收'],
     ['lightning absorb', '電擊吸收'],
+    ['cold absorb', '冰寒吸收'],
     ['fire resist', '火焰抗性'],
     ['lightning resist', '電擊抗性'],
     ['cold resist', '冰寒抗性'],
@@ -574,6 +635,7 @@
     ['enhanced damage', '傷害強化'],
     ['enhanced defense', '增強防禦'],
     ['defense vs. missile', '對遠程防禦'],
+    ['defense vs. melee', '對近戰防禦'],
     ['attack rating', '攻擊準確率'],
     ['faster cast rate', '施法速度'],
     ['faster block rate', '格擋速度'],
@@ -679,7 +741,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.11',
+    version: 'v0.12',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
