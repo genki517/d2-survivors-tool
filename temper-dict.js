@@ -28,6 +28,7 @@
     ['bone wall', '骨牆'],
     ['skeleton mastery', '骷髏專精'],
     ['poison and bone skills', '毒素與骸骨技能'],
+    ['combat skills', '戰鬥技能'],
     ['druid skills', '德魯伊技能'],
     ['werebear', '熊人變化'],
     ['lycanthropy', '變形術'],
@@ -41,6 +42,42 @@
   ];
 
   const V0_RULES = [
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Barbarian\s+Skill\s+Levels$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 野蠻人技能等級` : null
+    ],
+    [
+      /^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Barbarian Only|只限野蠻人)\)$/i,
+      (m) => {
+        if (!hasNum(m[1])) return null;
+        const name = String(m[2] || '').trim().toLowerCase();
+        const found = V0_SKILLS.find(([en]) => name.includes(en));
+        return found ? `${fmtSign(m[1])} 至${found[1]} (只限野蠻人)` : null;
+      }
+    ],
+    [
+      /^Spear\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*骸骨$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 骨矛`
+          : null
+    ],
+    [
+      /^Armor\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*骸骨$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 骸骨護甲`
+          : null
+    ],
+    [/^Freezes\s+target\s*([+-]?\d+(?:\.\d+)?)$/i, (m) =>
+      hasNum(m[1]) ? `凍結目標 ${fmtSign(m[1])}` : null
+    ],
+    [
+      /^Nova\s+on\s+striking\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*Frost$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 冰霜新星`
+          : null
+    ],
     [/^Poison\s+Length\s+Reduced\s+by\s*(\d+(?:\.\d+)?)\s*%?$/i, (m) =>
       hasNum(m[1]) ? `中毒時效縮短 ${m[1]}%` : null
     ],
@@ -295,7 +332,9 @@
   const V0_PHRASES = [
     ['all skills', '所有技能'],
     ['poison and bone skills', '毒素與骸骨技能'],
+    ['combat skills', '戰鬥技能'],
     ['druid skills', '德魯伊技能'],
+    ['freezes target', '凍結目標'],
     ['immolation arrow', '熾炎箭'],
     ['poison length reduced', '中毒時效縮短'],
     ['werebear', '熊人變化'],
@@ -432,7 +471,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.7',
+    version: 'v0.8',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
