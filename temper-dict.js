@@ -27,7 +27,14 @@
     ['bone spirit', '骸骨之魂'],
     ['bone wall', '骨牆'],
     ['skeleton mastery', '骷髏專精'],
+    ['fire mastery', '火焰專精'],
+    ['lightning mastery', '閃電專精'],
+    ['cold mastery', '冰寒專精'],
     ['masteries', '專精'],
+    ['raven', '掠鴉'],
+    ['find potion', '尋找藥水'],
+    ['find item', '尋找物品'],
+    ['grim ward', '恐怖圖騰'],
     ['poison and bone skills', '毒素與骸骨技能'],
     ['combat skills', '戰鬥技能'],
     ['shape shifting skills', '變形技能'],
@@ -60,6 +67,31 @@
   ];
 
   const V0_RULES = [
+    [/^(?:等級\s*)?(\d+)\s+Plague\s+Javelin\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 瘟疫標槍 (${m[2]} 次)` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Cloak\s+of\s+Shadows\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 魔影斗篷 (${m[2]} 次)` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Holy\s+Freeze\s+Aura\s+When\s+Equipped$/i, (m) =>
+      hasNum(m[1]) ? `裝備時賦予等級 ${m[1]} 神聖冰凍靈氣` : null
+    ],
+    [
+      /^when\s+you\s+Level-Up\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*暴風雪$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `當你升級時有 ${m[1]}% 機率施展等級 ${m[2]} 暴風雪`
+          : null
+    ],
+    [
+      /^Vision\s+when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*Dim$/i,
+      (m) =>
+        hasNum(m[1]) && hasNum(m[2])
+          ? `被擊中時有 ${m[1]}% 機率施展等級 ${m[2]} 昏暗視野`
+          : null
+    ],
+    [/^Fires\s+Magic\s+Arrows$/i, () => '射出魔法箭矢'],
+    [/^Fires\s+Explosive\s+Arrows\s+or\s+Bolts$/i, () => '射出爆炸的弓矢或弩箭'],
     [
       /^when\s+struck\s+.*?(\d+(?:\.\d+)?)\s*%\s*機率施展等級\s*(\d+)\s*暴風雪$/i,
       (m) =>
@@ -588,7 +620,14 @@
     ['martial arts', '武學技藝'],
     ['wake of fire', '焰痕衛哨'],
     ['shadow disciplines', '暗影修行'],
+    ['fire mastery', '火焰專精'],
+    ['lightning mastery', '閃電專精'],
+    ['cold mastery', '冰寒專精'],
     ['masteries', '專精'],
+    ['raven', '掠鴉'],
+    ['find potion', '尋找藥水'],
+    ['find item', '尋找物品'],
+    ['grim ward', '恐怖圖騰'],
     ['lightning strike', '閃電強擊'],
     ['lightning fury', '閃電烈怒'],
     ['lightning bolt', '閃電槍'],
@@ -741,7 +780,7 @@
   window.__D2IE_TEMPER_OBSERVER = observer;
 
   window.__D2IE_TEMPER_DICT_V0 = {
-    version: 'v0.12',
+    version: 'v0.13',
     rules: V0_RULES,
     phrases: V0_PHRASES,
     skills: V0_SKILLS,
