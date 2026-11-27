@@ -1,0 +1,260 @@
+(() => {
+  if (window.__D2IE_TEMPER_OBSERVER) {
+    window.__D2IE_TEMPER_OBSERVER.disconnect();
+    window.__D2IE_TEMPER_OBSERVER = null;
+  }
+
+  const processed = new WeakSet();
+
+  const fmtSign = (n) => {
+    if (n === undefined || n === null) return null;
+    const s = String(n).trim();
+    if (!s || s === 'undefined' || s === 'null') return null;
+    return s.startsWith('+') || s.startsWith('-') ? s : `+${s}`;
+  };
+
+  const hasNum = (n) =>
+    n !== undefined &&
+    n !== null &&
+    String(n).trim() !== '' &&
+    String(n).trim() !== 'undefined';
+
+  // 以後只改這裡的 V0_SKILLS / V0_RULES / V0_PHRASES 即可
+  const V0_SKILLS = [
+    ['teeth', '骸骨之牙'],
+    ['bone armor', '骸骨護甲'],
+    ['bone spear', '骨矛'],
+    ['bone spirit', '骸骨之魂'],
+    ['bone wall', '骨牆'],
+    ['skeleton mastery', '骷髏專精'],
+    ['curses', '詛咒'],
+    ['defensive auras', '防禦靈氣'],
+    ['battle command', '戰鬥指揮'],
+    ['battle orders', '戰鬥命令'],
+    ['battle cry', '戰吼']
+  ];
+
+  const V0_RULES = [
+    [/^\+?(\d+(?:\.\d+)?)\s*%\s*Enhanced Defense$/i, (m) =>
+      hasNum(m[1]) ? `增強防禦 ${fmtSign(m[1])}%` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+Defense$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 防禦` : null
+    ],
+    [/^Armor when struck\s*(.*)$/i, (m) => {
+      const rest = String(m[1] || '').trim();
+      return rest ? `被擊中時 ${rest}` : '被擊中時';
+    }],
+    [/^when struck\s*(.*)$/i, (m) => {
+      const rest = String(m[1] || '').trim();
+      return rest ? `被擊中時 ${rest}` : '被擊中時';
+    }],
+    [/^(\d+(?:\.\d+)?)\s*%\s*Increased Chance of Blocking$/i, (m) =>
+      hasNum(m[1]) ? `${m[1]}% 格擋機率提高` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Bone Prison\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 骨牢 (${m[2]} 次)` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Life Tap\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 偷取生命 (${m[2]} 次)` : null
+    ],
+    [/^(?:等級\s*)?(\d+)\s+Venom\s*\((\d+\/\d+)\s*(?:Charges|次)\)$/i, (m) =>
+      hasNum(m[1]) && hasNum(m[2]) ? `等級 ${m[1]} 淬毒 (${m[2]} 次)` : null
+    ],
+    [/^Heal Stamina Plus\s*\+?(\d+(?:\.\d+)?)\s*%?$/i, (m) =>
+      hasNum(m[1]) ? `精力恢復 ${m[1]}%` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+Maximum Stamina$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 精力上限` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Necromancer Skill Levels$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 死靈法師技能等級` : null
+    ],
+    [/^[+\/]\s*(?:to\s+)?([a-zA-Z\s]+?)\s*\((?:Necromancer Only|只限死靈法師)\)$/i, (m) => {
+      const name = String(m[1] || '').trim().toLowerCase();
+      const found = V0_SKILLS.find(([en]) => name.includes(en));
+      return found ? `+2 至${found[1]} (只限死靈法師)` : null;
+    }],
+    [/^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Necromancer Only|只限死靈法師)\)$/i, (m) => {
+      if (!hasNum(m[1])) return null;
+      const name = String(m[2] || '').trim().toLowerCase();
+      const found = V0_SKILLS.find(([en]) => name.includes(en));
+      return found ? `${fmtSign(m[1])} 至${found[1]} (只限死靈法師)` : null;
+    }],
+    [/^([+-]?\d+(?:\.\d+)?)\s+to\s+([a-zA-Z\s]+?)\s*\((?:Paladin Only|只限聖騎士)\)$/i, (m) => {
+      if (!hasNum(m[1])) return null;
+      const name = String(m[2] || '').trim().toLowerCase();
+      const found = V0_SKILLS.find(([en]) => name.includes(en));
+      return found ? `${fmtSign(m[1])} 至${found[1]} (只限聖騎士)` : null;
+    }],
+    [/^([+-]?\d+(?:\.\d+)?)\s+to\s+(Battle Command|Battle Orders|Battle Cry)$/i, (m) => {
+      if (!hasNum(m[1])) return null;
+      const name = String(m[2] || '').trim().toLowerCase();
+      const found = V0_SKILLS.find(([en]) => name.includes(en));
+      return found ? `${fmtSign(m[1])} 至${found[1]}` : null;
+    }],
+    [/^(\d+(?:\.\d+)?)\s*%\s*Better Chance of Getting Magic Items$/i, (m) =>
+      hasNum(m[1]) ? `尋獲魔法物品機率提高 ${m[1]}%` : null
+    ],
+    [/^([+-]?\d+(?:\.\d+)?)\s*%\s*Damage to Demons$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])}% 對惡魔的傷害` : null
+    ],
+    [/^([+-]?\d+(?:\.\d+)?)\s*%\s*Damage to Undead$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])}% 對不死怪物的傷害` : null
+    ],
+    [/^Slows Target by\s*(\d+(?:\.\d+)?)\s*%$/i, (m) =>
+      hasNum(m[1]) ? `使目標減緩 ${m[1]}%` : null
+    ],
+    [/^([+-]?\d+(?:\.\d+)?)\s*%\s*Increased Attack Speed$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])}% 攻擊速度` : null
+    ],
+    [/^Adds\s+(\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?)\s+fire damage$/i, (m) =>
+      hasNum(m[1]) ? `附加 ${m[1].replace(/\s+/g, '')} 火焰傷害` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s*%\s*Faster Cast Rate$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])}% 施法速度` : null
+    ],
+    [/^(\d+(?:\.\d+)?)\s*%\s*Damage Taken Goes To Mana$/i, (m) =>
+      hasNum(m[1]) ? `${m[1]}% 受到的傷害轉為法力` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s+to\s+Life\s*\(Based on Character Level\)$/i, (m) =>
+      hasNum(m[1]) ? `${fmtSign(m[1])} 生命 (依角色等級而定)` : null
+    ],
+    [/^Damage Reduced by\s*(\d+(?:\.\d+)?)$/i, (m) =>
+      hasNum(m[1]) ? `傷害降低 ${m[1]}` : null
+    ],
+    [/^Replenish Life\s*([+-]?\d+(?:\.\d+)?)$/i, (m) =>
+      hasNum(m[1]) ? `生命恢復 ${fmtSign(m[1])}` : null
+    ],
+    [/^\+?(\d+(?:\.\d+)?)\s*%\s*to\s+Maximum\s+(Fire|Lightning|Cold|Poison)\s+Resist$/i, (m) => {
+      if (!hasNum(m[1])) return null;
+      const elMap = { fire: '火焰', lightning: '電擊', cold: '冰寒', poison: '毒素' };
+      const zhEl = elMap[String(m[2] || '').toLowerCase()] || m[2];
+      return `${fmtSign(m[1])}% ${zhEl}抗性上限`;
+    }]
+  ];
+
+  const V0_PHRASES = [
+    ['all skills', '所有技能'],
+    ['fire resist', '火焰抗性'],
+    ['lightning resist', '電擊抗性'],
+    ['cold resist', '冰寒抗性'],
+    ['poison resist', '毒素抗性'],
+    ['all resistances', '所有抗性'],
+    ['strength', '力量'],
+    ['dexterity', '敏捷'],
+    ['vitality', '體能'],
+    ['energy', '精力'],
+    ['all attributes', '所有屬性'],
+    ['enhanced damage', '傷害強化'],
+    ['enhanced defense', '增強防禦'],
+    ['attack rating', '攻擊準確率'],
+    ['faster cast rate', '施法速度'],
+    ['faster hit recovery', '加快失衡恢復'],
+    ['faster run/walk', '跑步/行走速度'],
+    ['magic find', '尋獲魔法物品機率'],
+    ['gold find', '額外金幣掉落'],
+    ['damage reduced by', '傷害降低'],
+    ['magic damage reduced by', '魔法傷害降低'],
+    ['maximum life', '生命上限'],
+    ['maximum mana', '法力上限'],
+    ['life', '生命'],
+    ['mana', '法力']
+  ];
+
+  function trDirect(s) {
+    try {
+      return (
+        (window.D2I18N &&
+          typeof window.D2I18N.translate === 'function' &&
+          window.D2I18N.translate(s)) ||
+        ''
+      );
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function translateHead(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    const s = raw.trim();
+    if (!s || s.includes('undefined')) return null;
+
+    for (const [re, fn] of V0_RULES) {
+      const hit = s.match(re);
+      if (hit) {
+        const res = fn(hit);
+        if (res && !res.includes('undefined')) return res;
+      }
+    }
+
+    if (!/[a-zA-Z]{2,}/.test(s)) return s;
+
+    const d = trDirect(s);
+    if (d && d !== s && /[\u4e00-\u9fff]/.test(d) && !d.includes('undefined')) return d;
+
+    let rest = s, prefix = '', suffix = '';
+    const pct = rest.match(/([+-]?\d+(?:\.\d+)?)\s*%\s*$/);
+    if (pct && hasNum(pct[1])) {
+      suffix = ` ${fmtSign(pct[1])}%`;
+      rest = rest.slice(0, pct.index).trim();
+    }
+    const lead = rest.match(/^([+-]?\d+(?:\.\d+)?)\s+(?:to\s+)?/i);
+    if (lead && hasNum(lead[1])) {
+      prefix = `${fmtSign(lead[1])} `;
+      rest = rest.slice(lead[0].length).trim();
+    }
+
+    const core = rest.replace(/^to\s+/i, '').trim().toLowerCase();
+    const dCore = trDirect(core);
+    if (dCore && dCore !== core && /[\u4e00-\u9fff]/.test(dCore) && !dCore.includes('undefined')) {
+      return `${prefix}${dCore}${suffix}`.trim();
+    }
+
+    for (const [en, zh] of V0_PHRASES) {
+      if (core.includes(en)) {
+        const out = `${prefix}${zh}${suffix}`.trim();
+        return out.includes('undefined') ? null : out;
+      }
+    }
+    return null;
+  }
+
+  function run() {
+    const labels = document.querySelectorAll(
+      '#d2ec-overlay .d2ec-editor label.d2ec-row > span.d2ec-label'
+    );
+    labels.forEach((span) => {
+      if (processed.has(span)) return;
+      const txt = span.textContent || '';
+      const m = txt.match(/^(.*?)\s*（強化\s*(\d+)\s*次）$/);
+      if (!m) return;
+      const zh = translateHead(m[1]);
+      if (!zh || zh === m[1].trim()) return;
+      processed.add(span);
+      span.textContent = `${zh}（強化 ${m[2]} 次）`;
+    });
+  }
+
+  run();
+  const observer = new MutationObserver(() => run());
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  window.__D2IE_TEMPER_OBSERVER = observer;
+
+  window.__D2IE_TEMPER_DICT_V0 = {
+    version: 'v0',
+    rules: V0_RULES,
+    phrases: V0_PHRASES,
+    skills: V0_SKILLS,
+    translateHead,
+    run,
+    addRule(regex, formatter) {
+      V0_RULES.unshift([regex, formatter]);
+      run();
+    },
+    addPhrase(enLower, zh) {
+      V0_PHRASES.unshift([String(enLower).toLowerCase(), zh]);
+      run();
+    }
+  };
+})();
