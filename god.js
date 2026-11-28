@@ -14,6 +14,22 @@ void (function D2MOD_SHINRA_DUAL() {
   const host = window.__D2ED || null;
   const hasHostMod = !!(host && host.mod);
 
+  const makeEl = (tag, attrs, ...kids) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === 'style') e.style.cssText = v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : String(v));
+    }
+    for (const k of kids) if (k != null) e.append(k);
+    return e;
+  };
+  const hEl = (typeof host?.el === 'function') ? host.el : makeEl;
+  const hRender = (typeof host?.render === 'function') ? host.render : null;
+  const hToast = (typeof host?.toast === 'function') ? host.toast : null;
+  const hInRun = (typeof host?.inRun === 'function') ? host.inRun : null;
+  const hSyncLinked = (typeof host?.syncLinkedState === 'function') ? host.syncLinkedState : null;
+
   const state = {
     world: null,
     auto: false,
@@ -32,7 +48,7 @@ void (function D2MOD_SHINRA_DUAL() {
   }
 
   function inRun() {
-    if (typeof d2edInRun === 'function') return d2edInRun();
+    if (hInRun) return hInRun();
     const w = getWorld();
     return !!w?.player && !document.body.classList.contains('no-run');
   }
@@ -49,7 +65,7 @@ void (function D2MOD_SHINRA_DUAL() {
       x: w.player.x + Math.cos(angle) * dist,
       y: w.player.y + Math.sin(angle) * dist
     };
-    if (typeof d2edSyncLinkedState === 'function') d2edSyncLinkedState();
+    if (hSyncLinked) hSyncLinked();
     return state.anchor;
   }
 
@@ -80,7 +96,7 @@ void (function D2MOD_SHINRA_DUAL() {
   }
 
   function notify(msg) {
-    if (typeof d2edToast === 'function') d2edToast(msg);
+    if (hToast) hToast(msg);
     else console.log('[神羅天征]', msg);
   }
 
@@ -93,31 +109,31 @@ void (function D2MOD_SHINRA_DUAL() {
     const toggle = () => {
       state.auto = !on;
       try { localStorage.setItem(AUTO_KEY, state.auto ? '1' : '0'); } catch (e) { alert('無法儲存設定：' + e); return; }
-      if (typeof d2edRender === 'function') d2edRender();
+      if (hRender) hRender();
       notify(state.auto ? '自動神羅天征已開啟' : '自動神羅天征已關閉');
     };
     const reAnchorPull = () => {
       const res = pullEnemies(DIST, ANGLE, true);
-      if (typeof d2edRender === 'function') d2edRender();
+      if (hRender) hRender();
       notify(!res.ready ? '尚未抓到怪物或角色資料' : `已定點（右200）並吸取 ${res.pulled} 隻怪`);
     };
     const pullNow = () => {
       const res = pullEnemies(DIST, ANGLE, false);
-      if (typeof d2edRender === 'function') d2edRender();
+      if (hRender) hRender();
       notify(!res.ready ? '尚未抓到怪物或角色資料' : res.pulled ? `神羅天征已吸取 ${res.pulled} 隻怪` : '目前沒有可吸取的怪物');
     };
     const anchorInfo = state.anchor
       ? `已鎖定座標 (${state.anchor.x.toFixed(0)}, ${state.anchor.y.toFixed(0)})`
       : '尚未鎖定座標（首次吸怪將自動記住目前角色右邊 200）';
 
-    return d2edEl('section', { class: 'd2ed-sec' },
-      d2edEl('h3', {}, `神羅天征（${VER} 鎖定座標吸怪）`),
-      d2edEl('p', { class: 'd2ed-note' }, `${anchorInfo}。人物走動時怪物仍吸往已鎖定座標；點「定點」可重新記住目前角色右邊 ${DIST} 距離的位置並吸怪。`),
-      d2edEl('div', { class: 'd2ed-row' },
-        d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動神羅天征' : '開啟自動神羅天征'),
-        d2edEl('button', { type: 'button', onclick: reAnchorPull }, '定點並吸怪'),
-        d2edEl('button', { type: 'button', onclick: pullNow }, '立即吸怪'),
-        d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, `自動：${on ? '開' : '關'}`)));
+    return hEl('section', { class: 'd2ed-sec' },
+      hEl('h3', {}, `神羅天征（${VER} 鎖定座標吸怪）`),
+      hEl('p', { class: 'd2ed-note' }, `${anchorInfo}。人物走動時怪物仍吸往已鎖定座標；點「定點」可重新記住目前角色右邊 ${DIST} 距離的位置並吸怪。`),
+      hEl('div', { class: 'd2ed-row' },
+        hEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動神羅天征' : '開啟自動神羅天征'),
+        hEl('button', { type: 'button', onclick: reAnchorPull }, '定點並吸怪'),
+        hEl('button', { type: 'button', onclick: pullNow }, '立即吸怪'),
+        hEl('span', { class: 'd2ed-note', style: 'align-self: center' }, `自動：${on ? '開' : '關'}`)));
   }
 
   if (hasHostMod) {
