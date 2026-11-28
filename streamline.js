@@ -1,8 +1,8 @@
-void (function D2MOD_V6_LITE() {
-if (window.__D2MOD_V6_LOADED) return;
-window.__D2MOD_V6_LOADED = true;
+void (function D2MOD_V7_LITE() {
+if (window.__D2MOD_V7_LOADED) return;
+window.__D2MOD_V7_LOADED = true;
 
-const D2ZH_VERSION = 'V6大神精簡版';
+const D2ZH_VERSION = 'V7大神精簡版';
 window.__D2ZH_VERSION = D2ZH_VERSION;
 const D2ED_TEMPER_DICT_URL = 'https://raw.githubusercontent.com/genki517/d2-survivors-tool/refs/heads/main/temper-dict.js';
 const UI_FONT = '"Microsoft JhengHei UI", "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", sans-serif';
@@ -528,10 +528,108 @@ d2edEl('div', { class: 'd2ed-row' }, d2edEl('button', { type: 'button', class: o
 d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
 }
 
-// === 吞天：將地上道具與未開啟寶箱拉到角色腳邊（含自動吸取開關） ===
+// === 吞天：將地上道具與未開啟寶箱拉到角色腳邊（含自動吸取開關與獨立自動清藍裝開關） ===
 const D2ED_ENDPULL_KEY = 'd2ed:endPull';
+const D2ED_CLEANBLUE_KEY = 'd2ed:autoCleanBlue';
+const d2edBlueProtectedIds = new Set();
+
 function d2edEndPullOn() {
 try { return localStorage.getItem(D2ED_ENDPULL_KEY) !== '0'; } catch (_) { return true; }
+}
+function d2edCleanBlueOn() {
+try { return localStorage.getItem(D2ED_CLEANBLUE_KEY) === '1'; } catch (_) { return false; }
+}
+function d2edResolveBlueInvCtx() {
+const w = D2ED.world || window.__foundWorld || null;
+const g = (typeof D2GAME !== 'undefined' && D2GAME.game) || (w && w.game) || null;
+if (g && g.save && g.save.inventoryByClass && g.kit && g.kit.id) {
+const kitId = g.kit.id;
+const arr = g.save.inventoryByClass[kitId];
+if (Array.isArray(arr)) return { source: 'game.save', save: g.save, kitId, inv: arr, game: g };
+}
+if (w && w.save && w.save.inventoryByClass) {
+const kitId = (w.player && (w.player.cls || (w.player.kit && w.player.kit.id))) || Object.keys(w.save.inventoryByClass)[0];
+if (kitId && Array.isArray(w.save.inventoryByClass[kitId])) {
+return { source: 'world.save', save: w.save, kitId, inv: w.save.inventoryByClass[kitId], game: g };
+}
+}
+const lsSave = d2edReadSave();
+if (lsSave && lsSave.inventoryByClass && typeof lsSave.inventoryByClass === 'object') {
+const clsGuess = (D2ED.player && D2ED.player.cls)
+|| (w && w.player && (w.player.cls || (w.player.kit && w.player.kit.id)))
+|| lsSave.lastClass || lsSave.activeClass || Object.keys(lsSave.inventoryByClass)[0];
+if (clsGuess && Array.isArray(lsSave.inventoryByClass[clsGuess])) {
+return { source: 'localStorage', save: lsSave, kitId: clsGuess, inv: lsSave.inventoryByClass[clsGuess], game: g };
+}
+}
+return null;
+}
+function d2edSnapshotBlueInventory() {
+d2edBlueProtectedIds.clear();
+const ctx = d2edResolveBlueInvCtx();
+if (!ctx) return 0;
+for (const it of ctx.inv) {
+if (it && it.id) d2edBlueProtectedIds.add(it.id);
+}
+return d2edBlueProtectedIds.size;
+}
+if (d2edCleanBlueOn()) {
+setTimeout(d2edSnapshotBlueInventory, 800);
+}
+function d2edCalcBlueSellGold(item, save) {
+const lvl = Math.max(1, Number(item.level) || 1);
+const sellRank = (save && save.ranks && Number(save.ranks.sellPrice)) || 0;
+const baseGold = Math.max(5, Math.round(lvl * 12));
+return Math.round(baseGold * (1 + sellRank * 0.1));
+}
+function d2edCleanBlueItems(respectWhitelist = true) {
+const ctx = d2edResolveBlueInvCtx();
+if (!ctx) return { sold: 0, gold: 0, ready: false };
+const { source, save, kitId, inv, game } = ctx;
+let sold = 0;
+let gold = 0;
+const runClean = () => {
+for (let i = inv.length - 1; i >= 0; i--) {
+const it = inv[i];
+if (!it || typeof it !== 'object') continue;
+if (it.rarity !== 'magic') continue;
+if (it.type === 'quest' || it.type === 'essence') continue;
+if (respectWhitelist && it.id && d2edBlueProtectedIds.has(it.id)) continue;
+gold += d2edCalcBlueSellGold(it, save);
+inv.splice(i, 1);
+sold++;
+}
+if (sold > 0) {
+const lsSave = d2edReadSave();
+const targetSave = save || lsSave;
+if (targetSave && typeof targetSave === 'object') {
+targetSave.gold = (Number(targetSave.gold) || 0) + gold;
+try { localStorage.setItem(D2ED_SAVE_KEY, JSON.stringify(targetSave)); } catch (_) {}
+}
+if (lsSave && lsSave !== targetSave && typeof lsSave === 'object') {
+lsSave.gold = (Number(lsSave.gold) || 0) + gold;
+if (lsSave.inventoryByClass && Array.isArray(lsSave.inventoryByClass[kitId])) {
+const idsInInv = new Set(inv.map(x => x && x.id).filter(Boolean));
+lsSave.inventoryByClass[kitId] = lsSave.inventoryByClass[kitId].filter(x => {
+if (!x || x.rarity !== 'magic') return true;
+if (respectWhitelist && x.id && d2edBlueProtectedIds.has(x.id)) return true;
+return idsInInv.has(x.id);
+});
+}
+try { localStorage.setItem(D2ED_SAVE_KEY, JSON.stringify(lsSave)); } catch (_) {}
+}
+const w = D2ED.world || window.__foundWorld;
+if (w && w.player && typeof w.player.gold === 'number') {
+w.player.gold += gold;
+}
+}
+};
+if (game && typeof game.changeGear === 'function' && source === 'game.save') {
+game.changeGear(kitId, runClean);
+} else {
+runClean();
+}
+return { sold, gold, ready: true };
 }
 function d2edPullItemsToPlayer() {
 const w = D2ED.world || window.__foundWorld;
@@ -553,11 +651,14 @@ chests++;
 return { items, chests, total: items + chests };
 }
 setInterval(() => {
-if (d2edEndPullOn() && d2edInRun()) d2edPullItemsToPlayer();
+if (!d2edInRun()) return;
+if (d2edEndPullOn()) d2edPullItemsToPlayer();
+if (d2edCleanBlueOn()) d2edCleanBlueItems(true);
 }, 1000);
 
 function d2edEndPullSection() {
 const on = d2edEndPullOn();
+const blueOn = d2edCleanBlueOn();
 const toggle = () => {
 try { localStorage.setItem(D2ED_ENDPULL_KEY, on ? '0' : '1'); } catch (e) { alert('無法儲存設定：' + e); return; }
 d2edRender(); d2edToast(on ? '自動吞天已關閉' : '自動吞天已開啟');
@@ -566,12 +667,32 @@ const pullNow = () => {
 const res = d2edPullItemsToPlayer();
 d2edToast(res.total ? `已吞天 ${res.items} 物 / ${res.chests} 箱` : '目前沒有可吞天的道具或寶箱');
 };
+const toggleBlue = () => {
+const next = !blueOn;
+try { localStorage.setItem(D2ED_CLEANBLUE_KEY, next ? '1' : '0'); } catch (e) { alert('無法儲存設定：' + e); return; }
+if (next) {
+const kept = d2edSnapshotBlueInventory();
+d2edRender();
+d2edToast(`自動清藍裝已開啟（已保護包包原有 ${kept} 件物品）`);
+} else {
+d2edBlueProtectedIds.clear();
+d2edRender();
+d2edToast('自動清藍裝已關閉');
+}
+};
 return d2edEl('section', { class: 'd2ed-sec' }, d2edEl('h3', {}, '吞天（自動吸物與寶箱）'),
-d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未開啟寶箱拉到腳邊，也可直接點「立即吞天」手動吸取。'),
-d2edEl('div', { class: 'd2ed-row' },
+d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未開啟寶箱拉到腳邊；可獨立開啟「自動清藍裝」，開啟瞬間會保護包包原有藍裝，僅將之後新撿到的藍裝自動賣出換成金幣。'),
+d2edEl('div', { class: 'd2ed-row', style: 'align-items: center; flex-wrap: wrap' },
 d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動吞天' : '開啟自動吞天'),
 d2edEl('button', { type: 'button', onclick: pullNow }, '立即吞天'),
-d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, on ? '目前：開啟' : '目前：關閉')));
+d2edEl('button', {
+type: 'button',
+style: blueOn
+? 'padding: 2px 8px; font-size: 12px; background: #3b528c; border-color: #7da0f5; color: #fff;'
+: 'padding: 2px 8px; font-size: 12px; background: #1c2536; border-color: #4e6399; color: #8f9cff;',
+onclick: toggleBlue
+}, blueOn ? '自動清藍：開' : '自動清藍：關'),
+d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, `吞天：${on ? '開' : '關'}`)));
 }
 
 // === 神羅天征 V1：鎖定世界座標點，第一次吸怪自動記住，按「定點」可重新記住目前角色右邊 200 座標 ===
