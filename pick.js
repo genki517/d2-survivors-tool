@@ -18,6 +18,22 @@ void (function D2MOD_ENDPULL_DUAL() {
   const host = window.__D2ED || null;
   const hasHostMod = !!(host && host.mod);
 
+  const makeEl = (tag, attrs, ...kids) => {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === 'style') e.style.cssText = v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : String(v));
+    }
+    for (const k of kids) if (k != null) e.append(k);
+    return e;
+  };
+  const hEl = (typeof host?.el === 'function') ? host.el : makeEl;
+  const hRender = (typeof host?.render === 'function') ? host.render : null;
+  const hToast = (typeof host?.toast === 'function') ? host.toast : null;
+  const hInRun = (typeof host?.inRun === 'function') ? host.inRun : null;
+  const hReadSave = (typeof host?.readSave === 'function') ? host.readSave : null;
+
   const state = {
     world: null,
     game: null,
@@ -47,7 +63,7 @@ void (function D2MOD_ENDPULL_DUAL() {
   }
 
   function inRun() {
-    if (typeof d2edInRun === 'function') return d2edInRun();
+    if (hInRun) return hInRun();
     const w = getWorld();
     return !!w?.player && !document.body.classList.contains('no-run');
   }
@@ -57,7 +73,7 @@ void (function D2MOD_ENDPULL_DUAL() {
   }
 
   function readSave() {
-    if (typeof d2edReadSave === 'function') return d2edReadSave();
+    if (hReadSave) return hReadSave();
     try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {}; } catch (_) { return {}; }
   }
 
@@ -182,12 +198,12 @@ void (function D2MOD_ENDPULL_DUAL() {
   }
 
   function notify(msg) {
-    if (typeof d2edToast === 'function') d2edToast(msg);
+    if (hToast) hToast(msg);
     else console.log('[吞天]', msg);
   }
 
   function refreshUI() {
-    if (hasHostMod && typeof d2edRender === 'function') d2edRender();
+    if (hasHostMod && hRender) hRender();
     if (!hasHostMod && typeof renderStandalone === 'function') renderStandalone();
   }
 
@@ -230,20 +246,20 @@ void (function D2MOD_ENDPULL_DUAL() {
         notify('自動清藍裝已關閉');
       }
     };
-    return d2edEl('section', { class: 'd2ed-sec' },
-      d2edEl('h3', {}, '吞天（自動吸物與寶箱）'),
-      d2edEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未開啟寶箱拉到腳邊；可獨立開啟「自動清藍裝」，開啟瞬間會保護包包原有藍裝與符咒/珠寶，僅將之後新撿到的藍裝自動賣出換成金幣。'),
-      d2edEl('div', { class: 'd2ed-row', style: 'align-items: center; flex-wrap: wrap' },
-        d2edEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動吞天' : '開啟自動吞天'),
-        d2edEl('button', { type: 'button', onclick: triggerPull }, '立即吞天'),
-        d2edEl('button', {
+    return hEl('section', { class: 'd2ed-sec' },
+      hEl('h3', {}, '吞天（自動吸物與寶箱）'),
+      hEl('p', { class: 'd2ed-note' }, '開啟後每秒自動把地上裝備與未開啟寶箱拉到腳邊；可獨立開啟「自動清藍裝」，開啟瞬間會保護包包原有藍裝與符咒/珠寶，僅將之後新撿到的藍裝自動賣出換成金幣。'),
+      hEl('div', { class: 'd2ed-row', style: 'align-items: center; flex-wrap: wrap' },
+        hEl('button', { type: 'button', class: on ? '' : 'd2ed-main', onclick: toggle }, on ? '關閉自動吞天' : '開啟自動吞天'),
+        hEl('button', { type: 'button', onclick: triggerPull }, '立即吞天'),
+        hEl('button', {
           type: 'button',
           style: blueOn
             ? 'padding: 2px 8px; font-size: 12px; background: #3b528c; border-color: #7da0f5; color: #fff;'
             : 'padding: 2px 8px; font-size: 12px; background: #1c2536; border-color: #4e6399; color: #8f9cff;',
           onclick: toggleBlue
         }, blueOn ? '自動清藍：開' : '自動清藍：關'),
-        d2edEl('span', { class: 'd2ed-note', style: 'align-self: center' }, `吞天：${on ? '開' : '關'}`)));
+        hEl('span', { class: 'd2ed-note', style: 'align-self: center' }, `吞天：${on ? '開' : '關'}`)));
   }
 
   let tempMsg = '';
