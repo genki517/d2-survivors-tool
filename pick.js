@@ -1,4 +1,4 @@
-void (function D2_PULL_BLUE_V3() {
+void (function D2_PULL_BLUE_V4() {
   if (window.__D2_PULL_LOADED) return;
   window.__D2_PULL_LOADED = true;
 
@@ -142,6 +142,29 @@ void (function D2_PULL_BLUE_V3() {
     return { items, chests };
   }
 
+  const PROTECT_TYPES = new Set([
+    'quest', 'essence',
+    'charm', 'smallcharm', 'largecharm', 'grandcharm',
+    'jewel', 'jewels'
+  ]);
+  const PROTECT_BASES = new Set([
+    'cm1', 'cm2', 'cm3', 'charm',
+    'jew', 'jewel'
+  ]);
+
+  function isProtectedCharmOrJewel(it) {
+    if (!it || typeof it !== 'object') return false;
+    const t = String(it.type || '').trim().toLowerCase();
+    const b = String(it.base || '').trim().toLowerCase();
+    const n = String(it.name || '').trim().toLowerCase();
+    if (PROTECT_TYPES.has(t)) return true;
+    if (t.includes('charm') || t.includes('jewel') || it.type === '符咒' || it.type === '珠寶') return true;
+    if (PROTECT_BASES.has(b)) return true;
+    if (b.includes('charm') || b.includes('jewel') || it.base === '符咒' || it.base === '珠寶') return true;
+    if (n.includes('charm') || n.includes('jewel') || it.name.includes('符咒') || it.name.includes('珠寶')) return true;
+    return false;
+  }
+
   function cleanBlueItems(respectWhitelist = true) {
     const ctx = resolveInventoryContext();
     if (!ctx) {
@@ -160,7 +183,7 @@ void (function D2_PULL_BLUE_V3() {
         if (!it || typeof it !== 'object') continue;
         if (it.rarity) raritiesSeen.push(it.rarity);
         if (it.rarity !== 'magic') continue;
-        if (it.type === 'quest' || it.type === 'essence') continue;
+        if (isProtectedCharmOrJewel(it)) continue;
         if (respectWhitelist && it.id && state.protectedIds.has(it.id)) continue;
 
         gold += calcBlueSellGold(it, save);
@@ -184,6 +207,7 @@ void (function D2_PULL_BLUE_V3() {
             const idsInInv = new Set(inv.map(x => x && x.id).filter(Boolean));
             lsSave.inventoryByClass[kitId] = lsSave.inventoryByClass[kitId].filter(x => {
               if (!x || x.rarity !== 'magic') return true;
+              if (isProtectedCharmOrJewel(x)) return true;
               if (respectWhitelist && x.id && state.protectedIds.has(x.id)) return true;
               return idsInInv.has(x.id);
             });
@@ -233,7 +257,7 @@ void (function D2_PULL_BLUE_V3() {
   const blueBtn = document.createElement('button');
   blueBtn.id = 'd2-pull-blue-btn';
   blueBtn.type = 'button';
-  blueBtn.title = '左鍵：切換自動清藍裝（保護原有藍裝）｜右鍵：立即清現有藍裝（含白名單）';
+  blueBtn.title = '左鍵：切換自動清藍裝（保護原有藍裝與符咒/珠寶）｜右鍵：立即清現有藍裝（仍保護符咒/珠寶）';
   blueBtn.style.cssText = [
     'height:20px', 'padding:0 6px',
     'background:#1c2536', 'border:1px solid #4e6399', 'border-radius:4px',
@@ -404,7 +428,7 @@ void (function D2_PULL_BLUE_V3() {
     setTempText('清藍已歸零', 1000);
   });
 
-  // 右鍵點「清藍」小按鈕：立即清除目前包包裡所有藍裝（含白名單）方便測試
+  // 右鍵點「清藍」小按鈕：立即清除目前包包裡所有其他藍裝（仍保護符咒與珠寶）方便測試
   blueBtn.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     e.stopPropagation();
